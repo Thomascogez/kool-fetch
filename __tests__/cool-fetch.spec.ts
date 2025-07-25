@@ -28,8 +28,6 @@ const restHandlers = [
 		);
 	}),
 	http.get("https://example.com/authed", ({ request }) => {
-		console.log(request.headers.get("Authorization"));
-
 		if (request.headers.get("Authorization") !== "authorized") {
 			return HttpResponse.json(
 				{ message: "unauthorized" },
