@@ -18,25 +18,19 @@ jobs:
     steps:
         - uses: actions/checkout@v4
 
-        - name: "Install pnpm"
-          uses: pnpm/action-setup@v2
+        - name: "Install bun"
+          uses: oven-sh/setup-bun@v2
           with:
-            version: 9
-            run_install: false
+            bun-version: latest
 
-        - name: Use Node.js
-          uses: actions/setup-node@v4
-          with:
-            node-version: "22"
-
-        - name: Install dependencies
-          run: pnpm install --frozen-lockfile
+        - name: "Install dependencies"
+          run: bun install --frozen-lockfile
 
         - name: Checks
-          run: pnpm run check
+          run: bun run check
         
         - name: Build
-          run: pnpm run build
+          run: bun run build
 
         - name: Test
-          run: pnpm run test
+          run: bun run test
