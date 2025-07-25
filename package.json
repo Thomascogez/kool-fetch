@@ -1,5 +1,5 @@
 {
-  "name": "cool-fetch",
+  "name": "kool-fetch",
   "version": "0.0.1",
   "type": "module",
   "author": {
@@ -9,7 +9,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Thomascogez/cool-fetch"
+    "url": "https://github.com/Thomascogez/kool-fetch"
   },
   "description": "A 0-dependency fetch wrapper bringing axios like request and response interceptors",
   "exports": {

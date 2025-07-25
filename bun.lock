@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "cool-fetch",
+      "name": "kool-fetch",
       "devDependencies": {
         "@biomejs/biome": "^2.1.2",
         "@changesets/cli": "^2.29.5",

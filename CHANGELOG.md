@@ -1,4 +1,4 @@
-# cool-fetch
+# kool-fetch
 
 ## 0.0.1
 

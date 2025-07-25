@@ -1,7 +1,7 @@
 import type {
-	CoolFetchInstance,
-	CoolFetchOptions,
 	InterceptionOperationFN,
+	KoolFetchInstance,
+	KoolFetchOptions,
 	RequestInterceptorFN,
 	ResponseInterceptorFN,
 } from "./types.js";
@@ -38,8 +38,8 @@ const applyResponseInterceptors = async (
 };
 
 const createProxyHandler = (
-	options: CoolFetchOptions,
-): ProxyHandler<CoolFetchInstance> => {
+	options: KoolFetchOptions,
+): ProxyHandler<KoolFetchInstance> => {
 	const requestInterceptors = new Set<RequestInterceptorFN>();
 	const responseInterceptors = new Set<ResponseInterceptorFN>();
 	return {
@@ -111,9 +111,9 @@ const createProxyHandler = (
 	};
 };
 
-export const createCoolFetch = (
-	options?: CoolFetchOptions,
-): CoolFetchInstance => {
+export const createKoolFetch = (
+	options?: KoolFetchOptions,
+): KoolFetchInstance => {
 	const optionsWithDefaults = {
 		fetch: globalThis.fetch,
 		throwOnHttpError: true,
@@ -124,5 +124,5 @@ export const createCoolFetch = (
 	return new Proxy(
 		optionsWithDefaults.fetch,
 		createProxyHandler(optionsWithDefaults),
-	) as CoolFetchInstance;
+	) as KoolFetchInstance;
 };

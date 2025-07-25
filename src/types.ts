@@ -1,4 +1,4 @@
-export type CoolFetchOptions = {
+export type KoolFetchOptions = {
 	baseURL?: string | URL;
 	fetch?: typeof fetch; // default globalThis.fetch
 	init?: RequestInit;
@@ -24,7 +24,7 @@ export type InterceptionOperationFN = ((
 ) => void) &
 	((event: "response", fn: ResponseInterceptorFN) => void);
 
-export type CoolFetchInstance = typeof globalThis.fetch & {
+export type KoolFetchInstance = typeof globalThis.fetch & {
 	addInterceptor: InterceptionOperationFN;
 	removeInterceptor: InterceptionOperationFN;
 };
