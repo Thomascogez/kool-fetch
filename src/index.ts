@@ -69,10 +69,12 @@ const createProxyHandler = (
 			);
 
 			if (throwOnHttpError && !interceptedResponse.ok) {
-				throw httpErrorFactory?.(interceptedResponse, {
+				const error = await httpErrorFactory?.(interceptedResponse, {
 					url: endpointURL.toString(),
 					init: requestInit,
 				});
+
+				throw error;
 			}
 
 			return interceptedResponse;

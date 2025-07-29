@@ -6,7 +6,7 @@ export type KoolFetchOptions = {
 	httpErrorFactory?: (
 		response: Response,
 		requestOptions: { url: string; init: RequestInit },
-	) => Error; // default throw new Error(response.statusText)
+	) => Error | Promise<Error>; // default throw new Error(response.statusText)
 };
 
 export type RequestInterceptorFN = (
