@@ -185,3 +185,5 @@ export const createKoolFetch = (
 		createFetchProxyHandler(optionsWithDefaults),
 	) as KoolFetchInstance;
 };
+
+export type * from "./types";
