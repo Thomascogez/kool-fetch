@@ -1,5 +1,11 @@
 # kool-fetch
 
+## 0.1.0
+
+### Minor Changes
+
+- f285a31: Add .unwrap(target) method + return whole request object to httpErrorFactory
+
 ## 0.0.2
 
 ### Patch Changes
