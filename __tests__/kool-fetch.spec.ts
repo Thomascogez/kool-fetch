@@ -40,6 +40,8 @@ const restHandlers = [
 
 const server = setupServer(...restHandlers);
 
+class HttpError extends Error {}
+
 describe("kool-fetch", () => {
 	beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 
@@ -74,11 +76,10 @@ describe("kool-fetch", () => {
 		it("should not send a request without providing a baseURL and endpoint is not a valid URL", async () => {
 			const koolFetch = createKoolFetch();
 
-			await expect(() => koolFetch("/200")).rejects.toThrowError();
+			expect(() => koolFetch("/200")).toThrowError();
 		});
 		it("should send a request without providing a baseURL and endpoint is a valid URL", async () => {
 			const koolFetch = createKoolFetch();
-
 			const response = await koolFetch("https://example.com/200");
 			expect(response.status).toBe(200);
 		});
@@ -117,8 +118,6 @@ describe("kool-fetch", () => {
 	});
 
 	describe("Instance with throwOnHttpError enabled and custom httpErrorFactory", () => {
-		class HttpError extends Error {}
-
 		it("should not throw an error when the response is ok", async () => {
 			const koolFetch = createKoolFetch({
 				baseURL: "https://example.com",
@@ -319,7 +318,7 @@ describe("kool-fetch", () => {
 	});
 
 	describe("Instance with response interceptors", () => {
-		it("should make a request with an response interceptor", async () => {
+		it("should make a request with a response interceptor", async () => {
 			const koolFetch = createKoolFetch({ baseURL: "https://example.com" });
 
 			const responseInterceptor = (response: Response) => {
@@ -437,6 +436,67 @@ describe("kool-fetch", () => {
 			expect(response.status).toBe(200);
 			expect(spiedFirstResponseInterceptor).not.toHaveBeenCalled();
 			expect(spiedSecondResponseInterceptor).toHaveBeenCalledOnce();
+		});
+	});
+
+	describe("unwrap method", () => {
+		describe("Instance with throwOnHttpError enabled", () => {
+			it("should throw an error when unwrapping a response with an !ok status", async () => {
+				const koolFetch = createKoolFetch({
+					baseURL: "https://example.com",
+					throwOnHttpError: true,
+					httpErrorFactory: () => {
+						return new HttpError();
+					},
+				});
+
+				expect(koolFetch("/400").unwrap("json")).rejects.toThrowError(
+					HttpError,
+				);
+			});
+
+			it("should successfully unwrap a response", async () => {
+				const koolFetch = createKoolFetch({
+					baseURL: "https://example.com",
+					throwOnHttpError: true,
+				});
+
+				const response = await koolFetch("/200").unwrap("json");
+
+				expect(response).to.have.property("message", "ok");
+			});
+		});
+
+		describe("Instance with response interceptors", () => {
+			it("should unwrap a response with a response interceptor successfully executed", async () => {
+				const koolFetch = createKoolFetch({ baseURL: "https://example.com" });
+
+				const responseInterceptor = (response: Response) => {
+					return response;
+				};
+
+				const spiedResponseInterceptor = vi.fn(responseInterceptor);
+				koolFetch.addInterceptor("response", spiedResponseInterceptor);
+
+				await koolFetch("/200").unwrap("json");
+				expect(spiedResponseInterceptor).toHaveBeenCalledOnce();
+			});
+		});
+
+		describe("Instance with request interceptors", () => {
+			it("should unwrap a response with a request interceptor successfully executed", async () => {
+				const koolFetch = createKoolFetch({ baseURL: "https://example.com" });
+
+				const requestInterceptor = (request: Request) => {
+					return request;
+				};
+
+				const spiedRequestInterceptor = vi.fn(requestInterceptor);
+				koolFetch.addInterceptor("request", spiedRequestInterceptor);
+
+				await koolFetch("/200").unwrap("json");
+				expect(spiedRequestInterceptor).toHaveBeenCalledOnce();
+			});
 		});
 	});
 });

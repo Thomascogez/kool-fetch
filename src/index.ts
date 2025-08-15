@@ -1,4 +1,5 @@
 import type {
+	ExtendedFetch,
 	InterceptionOperationFN,
 	KoolFetchInstance,
 	KoolFetchOptions,
@@ -37,47 +38,103 @@ const applyResponseInterceptors = async (
 	return interceptedResponse;
 };
 
-const createProxyHandler = (
+const processResponse = async (
+	request: Request,
+	response: Response,
+	responseInterceptors: Set<ResponseInterceptorFN>,
+	options: KoolFetchOptions,
+) => {
+	const interceptedResponse = await applyResponseInterceptors(
+		response,
+		request,
+		responseInterceptors,
+	);
+
+	if (options.throwOnHttpError && !interceptedResponse.ok) {
+		const error = await options.httpErrorFactory?.(
+			interceptedResponse,
+			request,
+		);
+		throw error;
+	}
+
+	return interceptedResponse;
+};
+
+const createResponsePromiseProxyHandler = (
+	request: Request,
+	responseInterceptors: Set<ResponseInterceptorFN>,
+	options: KoolFetchOptions,
+): ProxyHandler<Promise<Response>> => {
+	return {
+		get(target, prop, receiver) {
+			if (prop === "unwrap") {
+				return async () => {
+					const response = await target;
+					const processedResponse = await processResponse(
+						request,
+						response,
+						responseInterceptors,
+						options,
+					);
+
+					return processedResponse.json();
+				};
+			}
+
+			if (prop === "then") {
+				return (
+					onFulfilled?: (value: Response) => unknown,
+					onRejected?: (reason: unknown) => unknown,
+				) => {
+					return target
+						.then((value: Response) =>
+							processResponse(request, value, responseInterceptors, options),
+						)
+						.then(onFulfilled, onRejected);
+				};
+			}
+
+			if (prop === "catch" || prop === "finally") {
+				const value = target[prop];
+				return typeof value === "function" ? value.bind(target) : value;
+			}
+			return Reflect.get(target, prop, receiver);
+		},
+	};
+};
+
+const createFetchProxyHandler = (
 	options: KoolFetchOptions,
 ): ProxyHandler<KoolFetchInstance> => {
 	const requestInterceptors = new Set<RequestInterceptorFN>();
 	const responseInterceptors = new Set<ResponseInterceptorFN>();
 	return {
-		apply: async (target, thisArg, argArray) => {
+		apply: (target, thisArg, argArray) => {
 			const [pathName, init] = argArray;
-			const {
-				baseURL,
-				init: fetchInit,
-				throwOnHttpError,
-				httpErrorFactory,
-			} = options;
+			const { baseURL, init: fetchInit } = options;
 
 			const endpointURL = buildRequestURL(baseURL ?? "", pathName);
 			const requestInit = mergeRequestInit(fetchInit ?? {}, init ?? {});
 
 			const request = new Request(endpointURL.toString(), requestInit);
-			const interceptedRequest = await applyRequestInterceptors(
-				request,
-				requestInterceptors,
+
+			const responsePromise = (async () => {
+				const interceptedRequest = await applyRequestInterceptors(
+					request,
+					requestInterceptors,
+				);
+				return target.apply(thisArg, [interceptedRequest]);
+			})();
+
+			return new Proxy(
+				responsePromise,
+				createResponsePromiseProxyHandler(
+					request,
+					responseInterceptors,
+					options,
+				),
 			);
-
-			const response = await target.apply(thisArg, [interceptedRequest]);
-			const interceptedResponse = await applyResponseInterceptors(
-				response,
-				request,
-				responseInterceptors,
-			);
-
-			if (throwOnHttpError && !interceptedResponse.ok) {
-				const error = await httpErrorFactory?.(interceptedResponse, {
-					url: endpointURL.toString(),
-					init: requestInit,
-				});
-
-				throw error;
-			}
-
-			return interceptedResponse;
 		},
 		get(target, key) {
 			if (key === "addInterceptor") {
@@ -124,7 +181,7 @@ export const createKoolFetch = (
 	};
 
 	return new Proxy(
-		optionsWithDefaults.fetch,
-		createProxyHandler(optionsWithDefaults),
+		optionsWithDefaults.fetch as unknown as ExtendedFetch,
+		createFetchProxyHandler(optionsWithDefaults),
 	) as KoolFetchInstance;
 };

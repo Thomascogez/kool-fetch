@@ -5,7 +5,7 @@ export type KoolFetchOptions = {
 	throwOnHttpError?: boolean; // default true
 	httpErrorFactory?: (
 		response: Response,
-		requestOptions: { url: string; init: RequestInit },
+		requestOptions: Request,
 	) => Error | Promise<Error>; // default throw new Error(response.statusText)
 };
 
@@ -24,7 +24,29 @@ export type InterceptionOperationFN = ((
 ) => void) &
 	((event: "response", fn: ResponseInterceptorFN) => void);
 
-export type KoolFetchInstance = typeof globalThis.fetch & {
+type UnwrapTargets = "json" | "arrayBuffer" | "blob" | "text";
+
+export type ExtendedFetch = <
+	ResponsePromise extends Promise<Response>,
+	U extends UnwrapTargets,
+>(
+	...args: Parameters<typeof fetch>
+) => ResponsePromise extends Promise<infer R>
+	? R extends Response
+		? ExtendedResponsePromise<R, U>
+		: never
+	: never;
+
+export type ExtendedResponsePromise<
+	R extends Response,
+	U extends UnwrapTargets,
+> = Promise<R> & {
+	unwrap: <Unwrapped = ReturnType<R[U]>>(
+		to: U,
+	) => Unwrapped extends Promise<Unwrapped> ? Unwrapped : Promise<Unwrapped>;
+};
+
+export type KoolFetchInstance = ExtendedFetch & {
 	addInterceptor: InterceptionOperationFN;
 	removeInterceptor: InterceptionOperationFN;
 };
