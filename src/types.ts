@@ -5,7 +5,7 @@ export type KoolFetchOptions = {
 	throwOnHttpError?: boolean; // default true
 	httpErrorFactory?: (
 		response: Response,
-		requestOptions: Request,
+		request: Request,
 	) => Error | Promise<Error>; // default throw new Error(response.statusText)
 };
 
