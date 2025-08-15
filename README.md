@@ -112,6 +112,26 @@ export const apiClient = hc(import.meta.env.VITE_API_URL, { fetch: koolFetch });
 | `throwOnHttpError` | Throw an error when the response is not ok | true | false |
 | `httpErrorFactory` | Factory function to create an error when the response is not ok | (response) => Error(response.statusText) | (response) => { return new Error(response.statusText) } |
 
+## Unwrap responses
+
+Responses of requests made with kool-fetch are wrapped with a Proxy that expose an `unwrap` method. This method allows you to unwrap the response to a specific type, making it a shortcut to classical `await response.json()` or `await response.arrayBuffer()`, ... calls.
+
+```ts
+const koolFetch = createKoolFetch({
+    throwOnHttpError: true,
+    baseURL: "https://api.example.com",
+});
+
+await koolFetch("/api/users").unwrap("json"); // if the response is not ok, an error will be thrown
+
+await koolFetch("/api/users").unwrap<{userId: number; name: string}>("json"); 
+
+await koolFetch("/api/file").unwrap("arrayBuffer");
+
+await koolFetch("/api/file").unwrap("text");
+
+```
+
 ## Interceptors
 
 kool-fetch provides a simple API to attach interceptors to the request and response events.
