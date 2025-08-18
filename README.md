@@ -75,33 +75,6 @@ await koolFetch("/api/users", {
 });
 ```
 
-## Usage with third party libraries
-
-### Hono RPC
-
-You can directly use kool-fetch with @honojs RPC client since it is a drop in replacement for the native fetch API
-
-```ts
-import { createKoolFetch } from "kool-fetch";
-import { hc } from "hono/client";
-
-const koolFetch = createKoolFetch({
-    init: { credentials: "include" }
-});
-
-koolFetch.addInterceptor("response", async (response) => {
-    if (!response.ok) {
-        const clonedResponse = response.clone();
-        const body = await clonedResponse.json()
-        toast.error(body.message ?? "An unknown error occurred");
-    }
-
-    return response;
-});
-
-export const apiClient = hc(import.meta.env.VITE_API_URL, { fetch: koolFetch });
-```
-
 ## Options
 
 | Name | Description | Default | Example |
@@ -180,6 +153,33 @@ koolFetch.addInterceptor("response", handleUnauthorizedResponseInterceptor);
 // You can also at any time remove an interceptor
 koolFetch.removeInterceptor("response", logResponseInterceptor);
 koolFetch.removeInterceptor("response", handleUnauthorizedResponseInterceptor);
+```
+
+## Usage with third party libraries
+
+### Hono RPC
+
+You can directly use kool-fetch with @honojs RPC client since it is a drop in replacement for the native fetch API
+
+```ts
+import { createKoolFetch } from "kool-fetch";
+import { hc } from "hono/client";
+
+const koolFetch = createKoolFetch({
+    init: { credentials: "include" }
+});
+
+koolFetch.addInterceptor("response", async (response) => {
+    if (!response.ok) {
+        const clonedResponse = response.clone();
+        const body = await clonedResponse.json()
+        toast.error(body.message ?? "An unknown error occurred");
+    }
+
+    return response;
+});
+
+export const apiClient = hc(import.meta.env.VITE_API_URL, { fetch: koolFetch });
 ```
 
 ## License
