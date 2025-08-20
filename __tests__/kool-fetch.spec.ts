@@ -450,7 +450,7 @@ describe("kool-fetch", () => {
 					},
 				});
 
-				expect(koolFetch("/400").unwrap("json")).rejects.toThrowError(
+				await expect(koolFetch("/400").unwrap("json")).rejects.toThrowError(
 					HttpError,
 				);
 			});
@@ -464,6 +464,17 @@ describe("kool-fetch", () => {
 				const response = await koolFetch("/200").unwrap("json");
 
 				expect(response).to.have.property("message", "ok");
+			});
+
+			it("should successfully unwrap a response to text", async () => {
+				const koolFetch = createKoolFetch({
+					baseURL: "https://example.com",
+					throwOnHttpError: true,
+				});
+
+				const response = await koolFetch("/200").unwrap("text");
+
+				expect(response).to.equal(JSON.stringify({ message: "ok" }));
 			});
 		});
 

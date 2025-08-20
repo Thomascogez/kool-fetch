@@ -24,7 +24,7 @@ export type InterceptionOperationFN = ((
 ) => void) &
 	((event: "response", fn: ResponseInterceptorFN) => void);
 
-type UnwrapTargets = "json" | "arrayBuffer" | "blob" | "text";
+export type UnwrapTargets = "json" | "arrayBuffer" | "blob" | "text";
 
 export type ExtendedFetch = <
 	ResponsePromise extends Promise<Response>,

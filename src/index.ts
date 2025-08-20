@@ -5,6 +5,7 @@ import type {
 	KoolFetchOptions,
 	RequestInterceptorFN,
 	ResponseInterceptorFN,
+	UnwrapTargets,
 } from "./types.js";
 import { buildRequestURL, mergeRequestInit } from "./utils.js";
 
@@ -69,7 +70,7 @@ const createResponsePromiseProxyHandler = (
 	return {
 		get(target, prop, receiver) {
 			if (prop === "unwrap") {
-				return async () => {
+				return async (unwrapTarget: UnwrapTargets) => {
 					const response = await target;
 					const processedResponse = await processResponse(
 						request,
@@ -78,7 +79,7 @@ const createResponsePromiseProxyHandler = (
 						options,
 					);
 
-					return processedResponse.json();
+					return processedResponse[unwrapTarget]();
 				};
 			}
 
