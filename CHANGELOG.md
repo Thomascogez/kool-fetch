@@ -1,5 +1,11 @@
 # kool-fetch
 
+## 0.1.1
+
+### Patch Changes
+
+- 1dd18d9: Take in account unwrap target
+
 ## 0.1.0
 
 ### Minor Changes
