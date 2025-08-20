@@ -51,3 +51,14 @@ export const mergeRequestInit = (...inits: RequestInit[]): RequestInit => {
 
 	return mergedInit;
 };
+
+export const tryCatch = async <T, V = Error>(
+	promise: Promise<T>,
+): Promise<[T, undefined] | [undefined, V]> => {
+	try {
+		const resolvedPromise = await promise;
+		return [resolvedPromise, undefined];
+	} catch (error) {
+		return [undefined, error as V];
+	}
+};

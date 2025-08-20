@@ -1,3 +1,5 @@
+import type { tryCatch } from "./utils";
+
 export type KoolFetchOptions = {
 	baseURL?: string | URL;
 	fetch?: typeof fetch; // default globalThis.fetch
@@ -44,6 +46,14 @@ export type ExtendedResponsePromise<
 	unwrap: <Unwrapped = ReturnType<R[U]>>(
 		to: U,
 	) => Unwrapped extends Promise<Unwrapped> ? Unwrapped : Promise<Unwrapped>;
+	unwrapSafe: <Unwrapped = ReturnType<R[U]>, Error = unknown>(
+		to: U,
+	) => ReturnType<
+		typeof tryCatch<
+			Unwrapped extends Promise<Unwrapped> ? Unwrapped : Promise<Unwrapped>,
+			Error
+		>
+	>;
 };
 
 export type KoolFetchInstance = ExtendedFetch & {

@@ -1,5 +1,6 @@
 import type {
 	ExtendedFetch,
+	ExtendedResponsePromise,
 	InterceptionOperationFN,
 	KoolFetchInstance,
 	KoolFetchOptions,
@@ -7,7 +8,7 @@ import type {
 	ResponseInterceptorFN,
 	UnwrapTargets,
 } from "./types.js";
-import { buildRequestURL, mergeRequestInit } from "./utils.js";
+import { buildRequestURL, mergeRequestInit, tryCatch } from "./utils.js";
 
 const applyRequestInterceptors = async (
 	request: Request,
@@ -66,7 +67,8 @@ const createResponsePromiseProxyHandler = (
 	request: Request,
 	responseInterceptors: Set<ResponseInterceptorFN>,
 	options: KoolFetchOptions,
-): ProxyHandler<Promise<Response>> => {
+	// biome-ignore lint/suspicious/noExplicitAny: we don't care about typing here
+): ProxyHandler<ExtendedResponsePromise<Response, any>> => {
 	return {
 		get(target, prop, receiver) {
 			if (prop === "unwrap") {
@@ -80,6 +82,21 @@ const createResponsePromiseProxyHandler = (
 					);
 
 					return processedResponse[unwrapTarget]();
+				};
+			}
+
+			if (prop === "unwrapSafe") {
+				return (unwrapTarget: UnwrapTargets) => {
+					return tryCatch(
+						new Proxy(
+							target,
+							createResponsePromiseProxyHandler(
+								request,
+								responseInterceptors,
+								options,
+							),
+						).unwrap(unwrapTarget),
+					);
 				};
 			}
 

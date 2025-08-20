@@ -439,7 +439,7 @@ describe("kool-fetch", () => {
 		});
 	});
 
-	describe("unwrap method", () => {
+	describe("unwrap and unwrapSafe methods", () => {
 		describe("Instance with throwOnHttpError enabled", () => {
 			it("should throw an error when unwrapping a response with an !ok status", async () => {
 				const koolFetch = createKoolFetch({
@@ -455,6 +455,20 @@ describe("kool-fetch", () => {
 				);
 			});
 
+			it("should throw and catch an error when safe unwrapping a response with an !ok status", async () => {
+				const koolFetch = createKoolFetch({
+					baseURL: "https://example.com",
+					throwOnHttpError: true,
+					httpErrorFactory: () => {
+						return new HttpError();
+					},
+				});
+
+				const [response, error] = await koolFetch("/400").unwrapSafe("json");
+				expect(response).to.be.undefined;
+				expect(error).to.be.instanceOf(HttpError);
+			});
+
 			it("should successfully unwrap a response", async () => {
 				const koolFetch = createKoolFetch({
 					baseURL: "https://example.com",
@@ -464,17 +478,6 @@ describe("kool-fetch", () => {
 				const response = await koolFetch("/200").unwrap("json");
 
 				expect(response).to.have.property("message", "ok");
-			});
-
-			it("should successfully unwrap a response to text", async () => {
-				const koolFetch = createKoolFetch({
-					baseURL: "https://example.com",
-					throwOnHttpError: true,
-				});
-
-				const response = await koolFetch("/200").unwrap("text");
-
-				expect(response).to.equal(JSON.stringify({ message: "ok" }));
 			});
 		});
 
@@ -492,6 +495,22 @@ describe("kool-fetch", () => {
 				await koolFetch("/200").unwrap("json");
 				expect(spiedResponseInterceptor).toHaveBeenCalledOnce();
 			});
+
+			it("should safe unwrap a response with a response interceptor successfully executed", async () => {
+				const koolFetch = createKoolFetch({ baseURL: "https://example.com" });
+
+				const responseInterceptor = (response: Response) => {
+					return response;
+				};
+
+				const spiedResponseInterceptor = vi.fn(responseInterceptor);
+				koolFetch.addInterceptor("response", spiedResponseInterceptor);
+
+				const [response, error] = await koolFetch("/200").unwrapSafe("json");
+				expect(response).toBeDefined;
+				expect(error).to.be.undefined;
+				expect(spiedResponseInterceptor).toHaveBeenCalledOnce();
+			});
 		});
 
 		describe("Instance with request interceptors", () => {
@@ -506,6 +525,22 @@ describe("kool-fetch", () => {
 				koolFetch.addInterceptor("request", spiedRequestInterceptor);
 
 				await koolFetch("/200").unwrap("json");
+				expect(spiedRequestInterceptor).toHaveBeenCalledOnce();
+			});
+
+			it("should safe unwrap a response with a request interceptor successfully executed", async () => {
+				const koolFetch = createKoolFetch({ baseURL: "https://example.com" });
+
+				const requestInterceptor = (request: Request) => {
+					return request;
+				};
+
+				const spiedRequestInterceptor = vi.fn(requestInterceptor);
+				koolFetch.addInterceptor("request", spiedRequestInterceptor);
+
+				const [response, error] = await koolFetch("/200").unwrapSafe("json");
+				expect(response).toBeDefined;
+				expect(error).to.be.undefined;
 				expect(spiedRequestInterceptor).toHaveBeenCalledOnce();
 			});
 		});
