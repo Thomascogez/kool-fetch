@@ -105,6 +105,16 @@ await koolFetch("/api/file").unwrap("text");
 
 ```
 
+### Safe version
+>
+> Alternatively you can use the `unwrapSafe` method which return a golang style tuple containing the unwrapped value and the error if any
+
+```ts
+const [unwrappedValue, error] = await koolFetch("/api/users").unwrapSafe("json"); // if response is not ok, unwrappedValue will be undefined and error will contain the error
+
+const [unwrappedValue, error] = await koolFetch("/api/users").unwrapSafe<{userId: number; name: string}>("json");
+```
+
 ## Interceptors
 
 kool-fetch provides a simple API to attach interceptors to the request and response events.
