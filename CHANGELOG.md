@@ -1,5 +1,11 @@
 # kool-fetch
 
+## 0.2.0
+
+### Minor Changes
+
+- 46de23b: Add safeUnwrap method
+
 ## 0.1.1
 
 ### Patch Changes
