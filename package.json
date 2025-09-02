@@ -43,5 +43,6 @@
   },
   "files": [
     "dist"
-  ]
+  ],
+  "packageManager": "bun@1.2.21"
 }
