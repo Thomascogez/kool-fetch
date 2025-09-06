@@ -61,7 +61,6 @@ koolFetch.addInterceptor("response", (response) => {
 
     return response;
 });
-
 ```
 
 Then you can use it like you would use the native fetch API
@@ -73,9 +72,13 @@ await koolFetch("/api/users", {
     method: "POST",
     body: JSON.stringify({ name: "John Doe" }),
 });
+
+await koolFetch("/api/users/").unwrap("json") // A native fetch version with some cool extra 😉
 ```
 
 ## Options
+
+When you are initializing your kool-fetch instance you have multiple usefull options available
 
 | Name | Description | Default | Example |
 | --- | --- | --- | --- |
@@ -85,7 +88,9 @@ await koolFetch("/api/users", {
 | `throwOnHttpError` | Throw an error when the response is not ok | true | false |
 | `httpErrorFactory` | Factory function to create an error when the response is not ok | (response) => Error(response.statusText) | (response) => { return new Error(response.statusText) } |
 
-## Unwrap responses
+## Features
+
+### Unwrap responses
 
 Responses of requests made with kool-fetch are wrapped with a Proxy that expose an `unwrap` method. This method allows you to unwrap the response to a specific type, making it a shortcut to classical `await response.json()` or `await response.arrayBuffer()`, ... calls.
 
@@ -105,7 +110,7 @@ await koolFetch("/api/file").unwrap("text");
 
 ```
 
-### Safe version
+#### Safe version
 >
 > Alternatively you can use the `unwrapSafe` method which return a golang style tuple containing the unwrapped value and the error if any
 
@@ -115,11 +120,11 @@ const [unwrappedValue, error] = await koolFetch("/api/users").unwrapSafe("json")
 const [unwrappedValue, error] = await koolFetch("/api/users").unwrapSafe<{userId: number; name: string}>("json");
 ```
 
-## Interceptors
+### Interceptors
 
 kool-fetch provides a simple API to attach interceptors to the request and response events.
 
-### Request interceptors
+#### Request interceptors
 
 You can attach request interceptors, they can be used to modify the request before it is sent to the server
 
@@ -142,7 +147,7 @@ koolFetch.addInterceptor("request", attachAuthorizationHeaderInterceptor);
 koolFetch.removeInterceptor("request", logRequestInterceptor);
 ```
 
-### Response interceptors
+#### Response interceptors
 
 You can attach response interceptors, they can be used to modify the response before it is returned to the client
 
