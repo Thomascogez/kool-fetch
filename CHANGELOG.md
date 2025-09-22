@@ -1,5 +1,11 @@
 # kool-fetch
 
+## 0.2.2
+
+### Patch Changes
+
+- 45dd6db: Fix url merging when path contains search params
+
 ## 0.2.1
 
 ### Patch Changes
