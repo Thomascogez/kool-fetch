@@ -29,7 +29,22 @@ export const buildRequestURL = (
 		return new URL(pathNameOrURL, endpointURL).toString();
 	}
 
-	endpointURL.pathname = joinPathNames(endpointURL.pathname, pathNameOrURL);
+	const parsedPathName = new URL(pathNameOrURL, endpointURL);
+
+	endpointURL.pathname = joinPathNames(
+		endpointURL.pathname,
+		parsedPathName.pathname,
+	);
+
+	if (parsedPathName.searchParams.size > 0) {
+		for (const [key, value] of parsedPathName.searchParams) {
+			endpointURL.searchParams.append(key, value);
+		}
+	}
+
+	if (parsedPathName.hash) {
+		endpointURL.hash = parsedPathName.hash;
+	}
 
 	return endpointURL;
 };

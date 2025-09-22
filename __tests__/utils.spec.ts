@@ -43,13 +43,13 @@ describe("utils", () => {
 			).toBe("https://example.com/base-path/a/b/c");
 		});
 
-		it("should build a request URl when having a URL baseURL", () => {
+		it("should build a request URL when having a URL baseURL", () => {
 			expect(
 				buildRequestURL(new URL("https://example.com"), "/a/b/c").toString(),
 			).toBe("https://example.com/a/b/c");
 		});
 
-		it("should build a request URl when having a URL baseURL with a trailing slash", () => {
+		it("should build a request URL when having a URL baseURL with a trailing slash", () => {
 			expect(
 				buildRequestURL(
 					new URL("https://example.com/base-path/"),
@@ -58,13 +58,22 @@ describe("utils", () => {
 			).toBe("https://example.com/base-path/a/b/c");
 		});
 
-		it("should build a request URl when having a URL baseURL with a path", () => {
+		it("should build a request URL when having a URL baseURL with a path", () => {
 			expect(
 				buildRequestURL(
 					new URL("https://example.com/base-path"),
 					"/a/b/c",
 				).toString(),
 			).toBe("https://example.com/base-path/a/b/c");
+		});
+
+		it("should correctly build a request URL when having a URL baseURL with a path and a query string", () => {
+			expect(
+				buildRequestURL(
+					new URL("https://example.com/base-path"),
+					"/a/b/c?a=1&b=2",
+				).toString(),
+			).toBe("https://example.com/base-path/a/b/c?a=1&b=2");
 		});
 	});
 
