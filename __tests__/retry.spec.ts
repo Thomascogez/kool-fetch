@@ -273,5 +273,37 @@ describe("Retry", () => {
 			expect(response.status).toBe(400);
 			expect(requestFn).toHaveBeenCalledTimes(1);
 		});
+
+		it("should pass response to delay function allowing Retry-After header usage", async () => {
+			const requestFn = vi.fn().mockResolvedValueOnce(
+				new Response(JSON.stringify({ message: "error" }), {
+					status: 503,
+					headers: { "Retry-After": "2" },
+				}),
+			);
+			requestFn.mockResolvedValueOnce(
+				new Response(JSON.stringify({ message: "ok" }), { status: 200 }),
+			);
+
+			const koolFetch = createKoolFetch({
+				baseURL: "https://example.com",
+				retry: {
+					retries: 3,
+					delay: (_attempt, response) => {
+						const retryAfter = response?.headers.get("Retry-After");
+						if (retryAfter) return parseInt(retryAfter, 10) * 1000;
+						return 0;
+					},
+				},
+				fetch: requestFn as unknown as typeof globalThis.fetch,
+			});
+
+			const start = Date.now();
+			await koolFetch("/503");
+			const duration = Date.now() - start;
+
+			expect(duration).toBeGreaterThanOrEqual(2000);
+			expect(requestFn).toHaveBeenCalledTimes(2);
+		});
 	});
 });

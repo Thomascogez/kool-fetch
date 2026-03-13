@@ -231,43 +231,43 @@ class RequestBuilder {
 			...this.responseInterceptors,
 		]);
 
-		let lastError: Error | null = null;
-
 		if (this.retryConfig) {
-			const { retries = DEFAULT_RETRIES, delay } = this.retryConfig;
-			for (let attempt = 0; attempt <= retries; attempt++) {
-				if (attempt > 0) {
-					const lastResponse = lastError ? null : undefined;
+			const retryConfig = this.retryConfig;
 
+			const executeWithRetry = async (
+				attempt: number,
+				lastResponse: Response | null,
+			): Promise<Response> => {
+				const { retries = DEFAULT_RETRIES, delay } = retryConfig;
+
+				if (attempt > 0 && delay) {
 					const currentDelay =
-						typeof delay === "function"
-							? delay(attempt, lastResponse as Response | null)
-							: (delay ?? 0);
+						typeof delay === "function" ? delay(attempt, lastResponse) : delay;
 
 					if (currentDelay > 0) {
 						await new Promise((resolve) => setTimeout(resolve, currentDelay));
 					}
 				}
 
-				try {
-					const response = await this.fetchFn(interceptedRequest);
+				const response = await this.fetchFn(interceptedRequest);
 
-					if (!shouldRetry(response, interceptedRequest, this.retryConfig)) {
-						return processResponse(
-							interceptedRequest,
-							response,
-							allResponseInterceptors,
-							this.options,
-						);
-					}
-
-					lastError = new Error(`Retry failed with status: ${response.status}`);
-				} catch (error) {
-					lastError = error instanceof Error ? error : new Error(String(error));
+				if (!shouldRetry(response, interceptedRequest, retryConfig)) {
+					return processResponse(
+						interceptedRequest,
+						response,
+						allResponseInterceptors,
+						this.options,
+					);
 				}
-			}
 
-			throw lastError;
+				if (attempt >= retries) {
+					throw new Error(`Retry failed with status: ${response.status}`);
+				}
+
+				return executeWithRetry(attempt + 1, response);
+			};
+
+			return executeWithRetry(0, null);
 		}
 
 		const response = await this.fetchFn(interceptedRequest);
