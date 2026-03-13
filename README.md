@@ -7,7 +7,7 @@
   <br>
 </h1>
 
-<h4 align="center">A lightweight (~8kb), 0 dependency fetch wrapper bringing axios like request and response interceptors</h4>
+<h4 align="center">A lightweight (~8kb), 0 dependency fetch wrapper bringing axios like request and response interceptors and built-in retry support</h4>
 
 <p align="center">
   <a href="https://badge.fury.io/js/kool-fetch">
@@ -82,11 +82,12 @@ When you are initializing your kool-fetch instance you have multiple usefull opt
 
 | Name | Description | Default | Example |
 | --- | --- | --- | --- |
-| `baseURL` | Base URL to use for all requests | undefined | "<https://example.com>" \| new URL("<https://example.com>") |
+| `baseURL` | Base URL to use for all requests | undefined | "https://example.com" | new URL("https://example.com") |
 | `fetch` | Fetch function to use for all requests | globalThis.fetch | globalThis.fetch |
 | `init` | Request init to use for all requests | undefined | { headers: { "Authorization": "Bearer token" } } |
 | `throwOnHttpError` | Throw an error when the response is not ok | true | false |
 | `httpErrorFactory` | Factory function to create an error when the response is not ok | (response) => Error(response.statusText) | (response) => { return new Error(response.statusText) } |
+| `retry` | Retry configuration (boolean or object) | undefined | true / { retries: 3 } |
 
 ## Features
 
@@ -168,6 +169,88 @@ koolFetch.addInterceptor("response", handleUnauthorizedResponseInterceptor);
 // You can also at any time remove an interceptor
 koolFetch.removeInterceptor("response", logResponseInterceptor);
 koolFetch.removeInterceptor("response", handleUnauthorizedResponseInterceptor);
+```
+
+#### Per-Request Interceptors
+
+You can also add interceptors per-request using the chained API:
+
+```ts
+const response = await koolFetch("/api/users")
+  .addInterceptor("request", (req) => {
+    req.headers.set("Authorization", "Bearer token");
+    return req;
+  })
+  .addInterceptor("response", (res) => {
+    console.log("Response received");
+    return res;
+  });
+
+// Also supports unwrap/unwrapSafe
+const data = await koolFetch("/api/users")
+  .addInterceptor("response", loggingInterceptor)
+  .unwrap("json");
+```
+
+### Retry
+
+kool-fetch supports automatic retry on failure.
+
+#### Global Retry
+
+Enable retry globally when creating the instance:
+
+```ts
+const api = createKoolFetch({
+  baseURL: "https://api.example.com",
+  retry: true, // enables retry with defaults
+  // or with custom config:
+  retry: {
+    retries: 3,
+    delay: 1000,
+    statusCodes: [500, 502, 503, 504],
+    methods: ["GET", "HEAD", "OPTIONS"]
+  }
+});
+```
+
+#### Per-Request Retry Override
+
+Override retry settings per-request:
+
+```ts
+// Disable retry for this specific request
+await koolFetch("/flaky", { retry: false });
+
+// Override with custom settings
+await koolFetch("/flaky", { retry: { retries: 5 } });
+```
+
+#### Retry Options
+
+| Option | Description | Default |
+| --- | --- | --- |
+| `retries` | Number of retry attempts | `3` |
+| `delay` | Delay between retries (ms) or function | `0` |
+| `statusCodes` | HTTP status codes to retry | `[500, 502, 503, 504]` |
+| `methods` | HTTP methods to retry | `["GET", "HEAD", "OPTIONS"]` |
+
+#### Retry Delay Function
+
+The `delay` option can be a function for dynamic delays (e.g., exponential backoff):
+
+```ts
+retry: {
+  retries: 3,
+  delay: (attempt, response) => {
+    // Use Retry-After header if available
+    const retryAfter = response?.headers.get("Retry-After");
+    if (retryAfter) return parseInt(retryAfter) * 1000;
+    
+    // Exponential backoff
+    return 1000 * 2 ** attempt;
+  }
+}
 ```
 
 ## Usage with third party libraries

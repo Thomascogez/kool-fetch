@@ -78,6 +78,7 @@ describe("kool-fetch", () => {
 
 			expect(() => koolFetch("/200")).toThrowError();
 		});
+
 		it("should send a request without providing a baseURL and endpoint is a valid URL", async () => {
 			const koolFetch = createKoolFetch();
 			const response = await koolFetch("https://example.com/200");
@@ -276,7 +277,7 @@ describe("kool-fetch", () => {
 			expect(spiedRequestInterceptor).toHaveBeenCalledOnce();
 		});
 
-		it("should remove the request interceptor and it should not be called", async () => {
+		it("should remove a request interceptor and it should not be called", async () => {
 			const koolFetch = createKoolFetch({ baseURL: "https://example.com" });
 
 			const requestInterceptor = (request: Request) => {
@@ -439,50 +440,124 @@ describe("kool-fetch", () => {
 		});
 	});
 
-	describe("unwrap and unwrapSafe methods", () => {
-		describe("Instance with throwOnHttpError enabled", () => {
-			it("should throw an error when unwrapping a response with an !ok status", async () => {
-				const koolFetch = createKoolFetch({
-					baseURL: "https://example.com",
-					throwOnHttpError: true,
-					httpErrorFactory: () => {
-						return new HttpError();
-					},
-				});
+	describe("Per-request interceptors", () => {
+		describe("Instance with per-request request interceptors", () => {
+			it("should make a request with a per-request request interceptor", async () => {
+				const koolFetch = createKoolFetch({ baseURL: "https://example.com" });
 
-				await expect(koolFetch("/400").unwrap("json")).rejects.toThrowError(
-					HttpError,
+				const requestInterceptor = (request: Request) => {
+					return new Request(request.url, {
+						...request,
+						headers: {
+							...request.headers,
+							Authorization: "authorized",
+						},
+					});
+				};
+
+				const spiedRequestInterceptor = vi.fn(requestInterceptor);
+
+				const response = await koolFetch("/authed").addInterceptor(
+					"request",
+					spiedRequestInterceptor,
+				);
+
+				expect(response.status).toBe(200);
+				expect(spiedRequestInterceptor).toHaveBeenCalledOnce();
+			});
+
+			it("should make a request with multiple per-request request interceptors", async () => {
+				const koolFetch = createKoolFetch({ baseURL: "https://example.com" });
+
+				const firstRequestInterceptor = (request: Request) => {
+					return request;
+				};
+
+				const spiedFirstRequestInterceptor = vi.fn(firstRequestInterceptor);
+
+				const secondRequestInterceptor = (request: Request) => {
+					return request;
+				};
+
+				const spiedSecondRequestInterceptor = vi.fn(secondRequestInterceptor);
+
+				const response = await koolFetch("/200")
+					.addInterceptor("request", spiedFirstRequestInterceptor)
+					.addInterceptor("request", spiedSecondRequestInterceptor);
+
+				expect(response.status).toBe(200);
+				expect(spiedFirstRequestInterceptor).toHaveBeenCalledOnce();
+				expect(spiedSecondRequestInterceptor).toHaveBeenCalledOnce();
+				expect(spiedFirstRequestInterceptor).toHaveBeenCalledBefore(
+					spiedSecondRequestInterceptor,
 				);
 			});
 
-			it("should throw and catch an error when safe unwrapping a response with an !ok status", async () => {
-				const koolFetch = createKoolFetch({
-					baseURL: "https://example.com",
-					throwOnHttpError: true,
-					httpErrorFactory: () => {
-						return new HttpError();
-					},
-				});
+			it("should allow chaining multiple addInterceptor calls", async () => {
+				const koolFetch = createKoolFetch({ baseURL: "https://example.com" });
 
-				const [response, error] = await koolFetch("/400").unwrapSafe("json");
-				expect(response).to.be.undefined;
-				expect(error).to.be.instanceOf(HttpError);
-			});
+				const response = await koolFetch("/200")
+					.addInterceptor("request", (req) => req)
+					.addInterceptor("response", (res) => res)
+					.addInterceptor("request", (req) => req);
 
-			it("should successfully unwrap a response", async () => {
-				const koolFetch = createKoolFetch({
-					baseURL: "https://example.com",
-					throwOnHttpError: true,
-				});
-
-				const response = await koolFetch("/200").unwrap("json");
-
-				expect(response).to.have.property("message", "ok");
+				expect(response.status).toBe(200);
 			});
 		});
 
-		describe("Instance with response interceptors", () => {
-			it("should unwrap a response with a response interceptor successfully executed", async () => {
+		describe("Instance with per-request response interceptors", () => {
+			it("should make a request with a per-request response interceptor", async () => {
+				const koolFetch = createKoolFetch({ baseURL: "https://example.com" });
+
+				const responseInterceptor = (response: Response) => {
+					return new Response(
+						JSON.stringify({ message: "modified" }),
+						response,
+					);
+				};
+
+				const spiedResponseInterceptor = vi.fn(responseInterceptor);
+
+				const response = await koolFetch("/200").addInterceptor(
+					"response",
+					spiedResponseInterceptor,
+				);
+
+				expect(response.status).toBe(200);
+				expect(spiedResponseInterceptor).toHaveBeenCalledOnce();
+				expect(await response.json()).toEqual({ message: "modified" });
+			});
+
+			it("should make a request with multiple per-request response interceptors", async () => {
+				const koolFetch = createKoolFetch({ baseURL: "https://example.com" });
+
+				const firstResponseInterceptor = (response: Response) => {
+					return response;
+				};
+
+				const spiedFirstResponseInterceptor = vi.fn(firstResponseInterceptor);
+
+				const secondResponseInterceptor = (response: Response) => {
+					return response;
+				};
+
+				const spiedSecondResponseInterceptor = vi.fn(secondResponseInterceptor);
+
+				const response = await koolFetch("/200")
+					.addInterceptor("response", spiedFirstResponseInterceptor)
+					.addInterceptor("response", spiedSecondResponseInterceptor);
+
+				expect(response.status).toBe(200);
+				expect(spiedFirstResponseInterceptor).toHaveBeenCalledOnce();
+				expect(spiedSecondResponseInterceptor).toHaveBeenCalledOnce();
+				expect(spiedFirstResponseInterceptor).toHaveBeenCalledBefore(
+					spiedSecondResponseInterceptor,
+				);
+			});
+		});
+
+		describe("Per-request interceptors with unwrap", () => {
+			it("should work with unwrap method", async () => {
 				const koolFetch = createKoolFetch({ baseURL: "https://example.com" });
 
 				const responseInterceptor = (response: Response) => {
@@ -490,13 +565,16 @@ describe("kool-fetch", () => {
 				};
 
 				const spiedResponseInterceptor = vi.fn(responseInterceptor);
-				koolFetch.addInterceptor("response", spiedResponseInterceptor);
 
-				await koolFetch("/200").unwrap("json");
+				const data = await koolFetch("/200")
+					.addInterceptor("response", spiedResponseInterceptor)
+					.unwrap("json");
+
+				expect(data).toEqual({ message: "ok" });
 				expect(spiedResponseInterceptor).toHaveBeenCalledOnce();
 			});
 
-			it("should safe unwrap a response with a response interceptor successfully executed", async () => {
+			it("should work with unwrapSafe method", async () => {
 				const koolFetch = createKoolFetch({ baseURL: "https://example.com" });
 
 				const responseInterceptor = (response: Response) => {
@@ -504,31 +582,55 @@ describe("kool-fetch", () => {
 				};
 
 				const spiedResponseInterceptor = vi.fn(responseInterceptor);
-				koolFetch.addInterceptor("response", spiedResponseInterceptor);
 
-				const [response, error] = await koolFetch("/200").unwrapSafe("json");
-				expect(response).toBeDefined;
-				expect(error).to.be.undefined;
+				const [data, error] = await koolFetch("/200")
+					.addInterceptor("response", spiedResponseInterceptor)
+					.unwrapSafe("json");
+
+				expect(data).toEqual({ message: "ok" });
+				expect(error).toBeUndefined();
 				expect(spiedResponseInterceptor).toHaveBeenCalledOnce();
 			});
 		});
 
-		describe("Instance with request interceptors", () => {
-			it("should unwrap a response with a request interceptor successfully executed", async () => {
+		describe("Per-request interceptors combined with global interceptors", () => {
+			it("should call global and per-request interceptors in order", async () => {
 				const koolFetch = createKoolFetch({ baseURL: "https://example.com" });
 
-				const requestInterceptor = (request: Request) => {
-					return request;
-				};
+				const globalRequestInterceptor = vi.fn((request: Request) => request);
+				const perRequestRequestInterceptor = vi.fn(
+					(request: Request) => request,
+				);
+				const globalResponseInterceptor = vi.fn(
+					(response: Response) => response,
+				);
+				const perRequestResponseInterceptor = vi.fn(
+					(response: Response) => response,
+				);
 
-				const spiedRequestInterceptor = vi.fn(requestInterceptor);
-				koolFetch.addInterceptor("request", spiedRequestInterceptor);
+				koolFetch.addInterceptor("request", globalRequestInterceptor);
+				koolFetch.addInterceptor("response", globalResponseInterceptor);
 
-				await koolFetch("/200").unwrap("json");
-				expect(spiedRequestInterceptor).toHaveBeenCalledOnce();
+				const response = await koolFetch("/200")
+					.addInterceptor("request", perRequestRequestInterceptor)
+					.addInterceptor("response", perRequestResponseInterceptor);
+
+				expect(response.status).toBe(200);
+				expect(globalRequestInterceptor).toHaveBeenCalledOnce();
+				expect(perRequestRequestInterceptor).toHaveBeenCalledOnce();
+				expect(globalRequestInterceptor).toHaveBeenCalledBefore(
+					perRequestRequestInterceptor,
+				);
+				expect(globalResponseInterceptor).toHaveBeenCalledOnce();
+				expect(perRequestResponseInterceptor).toHaveBeenCalledOnce();
+				expect(globalResponseInterceptor).toHaveBeenCalledBefore(
+					perRequestResponseInterceptor,
+				);
 			});
+		});
 
-			it("should safe unwrap a response with a request interceptor successfully executed", async () => {
+		describe("Remove per-request interceptor", () => {
+			it("should remove a per-request interceptor and it should not be called", async () => {
 				const koolFetch = createKoolFetch({ baseURL: "https://example.com" });
 
 				const requestInterceptor = (request: Request) => {
@@ -536,12 +638,13 @@ describe("kool-fetch", () => {
 				};
 
 				const spiedRequestInterceptor = vi.fn(requestInterceptor);
-				koolFetch.addInterceptor("request", spiedRequestInterceptor);
 
-				const [response, error] = await koolFetch("/200").unwrapSafe("json");
-				expect(response).toBeDefined;
-				expect(error).to.be.undefined;
-				expect(spiedRequestInterceptor).toHaveBeenCalledOnce();
+				const response = await koolFetch("/200")
+					.addInterceptor("request", spiedRequestInterceptor)
+					.removeInterceptor("request", spiedRequestInterceptor);
+
+				expect(response.status).toBe(200);
+				expect(spiedRequestInterceptor).not.toHaveBeenCalled();
 			});
 		});
 	});

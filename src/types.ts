@@ -1,43 +1,6 @@
 import type { tryCatch } from "./utils";
 
-export type KoolFetchOptions = {
-	baseURL?: string | URL;
-	fetch?: typeof fetch; // default globalThis.fetch
-	init?: RequestInit;
-	throwOnHttpError?: boolean; // default true
-	httpErrorFactory?: (
-		response: Response,
-		request: Request,
-	) => Error | Promise<Error>; // default throw new Error(response.statusText)
-};
-
-export type RequestInterceptorFN = (
-	request: Request,
-) => Promise<Request> | Request;
-
-export type ResponseInterceptorFN = (
-	response: Response,
-	request: Request,
-) => Promise<Response> | Response;
-
-export type InterceptionOperationFN = ((
-	event: "request",
-	fn: RequestInterceptorFN,
-) => void) &
-	((event: "response", fn: ResponseInterceptorFN) => void);
-
 export type UnwrapTargets = "json" | "arrayBuffer" | "blob" | "text";
-
-export type ExtendedFetch = <
-	ResponsePromise extends Promise<Response>,
-	U extends UnwrapTargets,
->(
-	...args: Parameters<typeof fetch>
-) => ResponsePromise extends Promise<infer R>
-	? R extends Response
-		? ExtendedResponsePromise<R, U>
-		: never
-	: never;
 
 export type ExtendedResponsePromise<
 	R extends Response,
@@ -56,7 +19,57 @@ export type ExtendedResponsePromise<
 	>;
 };
 
-export type KoolFetchInstance = ExtendedFetch & {
+export type KoolFetchOptions = {
+	baseURL?: string | URL;
+	fetch?: typeof fetch;
+	init?: RequestInit;
+	throwOnHttpError?: boolean;
+	httpErrorFactory?: (
+		response: Response,
+		request: Request,
+	) => Error | Promise<Error>;
+	retry?: RetryOption;
+};
+
+export type RequestInterceptorFN = (
+	request: Request,
+) => Promise<Request> | Request;
+
+export type ResponseInterceptorFN = (
+	response: Response,
+	request: Request,
+) => Promise<Response> | Response;
+
+export type InterceptorHandler<T> = ((
+	event: "request",
+	fn: RequestInterceptorFN,
+) => T) &
+	((event: "response", fn: ResponseInterceptorFN) => T);
+
+export type InterceptionOperationFN = InterceptorHandler<void>;
+
+export type KoolFetchInstance = {
+	(...args: Parameters<typeof fetch>): KoolFetchRequestBuilder;
 	addInterceptor: InterceptionOperationFN;
 	removeInterceptor: InterceptionOperationFN;
+};
+
+export type RetryConfig = {
+	retries?: number;
+	delay?: number | ((attempt: number, response: Response | null) => number);
+	statusCodes?: number[];
+	methods?: string[];
+};
+
+export type RetryOption = boolean | RetryConfig;
+
+export type KoolFetchRequestInit = RequestInit & {
+	retry?: RetryOption;
+};
+
+export type KoolFetchRequestBuilder = Promise<Response> & {
+	addInterceptor: InterceptorHandler<KoolFetchRequestBuilder>;
+	removeInterceptor: InterceptorHandler<KoolFetchRequestBuilder>;
+	unwrap: ExtendedResponsePromise<Response, UnwrapTargets>["unwrap"];
+	unwrapSafe: ExtendedResponsePromise<Response, UnwrapTargets>["unwrapSafe"];
 };

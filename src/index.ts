@@ -1,14 +1,20 @@
 import type {
-	ExtendedFetch,
-	ExtendedResponsePromise,
 	InterceptionOperationFN,
 	KoolFetchInstance,
 	KoolFetchOptions,
+	KoolFetchRequestBuilder,
+	KoolFetchRequestInit,
 	RequestInterceptorFN,
 	ResponseInterceptorFN,
+	RetryConfig,
+	RetryOption,
 	UnwrapTargets,
 } from "./types.js";
 import { buildRequestURL, mergeRequestInit, tryCatch } from "./utils.js";
+
+const DEFAULT_RETRY_METHODS = ["GET", "HEAD", "OPTIONS"];
+const DEFAULT_RETRY_STATUS_CODES = [500, 502, 503, 504];
+const DEFAULT_RETRIES = 3;
 
 const applyRequestInterceptors = async (
 	request: Request,
@@ -17,7 +23,7 @@ const applyRequestInterceptors = async (
 	let interceptedRequest = request;
 
 	for (const requestInterceptor of requestInterceptors) {
-		interceptedRequest = await requestInterceptor(request);
+		interceptedRequest = await requestInterceptor(interceptedRequest);
 	}
 
 	return interceptedRequest;
@@ -63,130 +69,241 @@ const processResponse = async (
 	return interceptedResponse;
 };
 
-const createResponsePromiseProxyHandler = (
+const normalizeRetryOption = (
+	retry: RetryOption | undefined,
+): RetryConfig | undefined => {
+	if (retry === false || retry === undefined) {
+		return undefined;
+	}
+	if (retry === true) {
+		return {};
+	}
+	return retry;
+};
+
+const mergeRetryConfig = (
+	globalRetry: RetryOption | undefined,
+	perRequestRetry: RetryOption | undefined,
+): RetryConfig | undefined => {
+	if (perRequestRetry === false) {
+		return undefined;
+	}
+
+	const normalizedGlobal = normalizeRetryOption(globalRetry);
+	const normalizedPerRequest = normalizeRetryOption(perRequestRetry);
+
+	if (!normalizedGlobal && !normalizedPerRequest) {
+		return undefined;
+	}
+
+	if (globalRetry === false && !normalizedPerRequest) {
+		return undefined;
+	}
+
+	return {
+		retries:
+			normalizedPerRequest?.retries ??
+			normalizedGlobal?.retries ??
+			DEFAULT_RETRIES,
+		delay: normalizedPerRequest?.delay ?? normalizedGlobal?.delay,
+		statusCodes:
+			normalizedPerRequest?.statusCodes ??
+			normalizedGlobal?.statusCodes ??
+			DEFAULT_RETRY_STATUS_CODES,
+		methods:
+			normalizedPerRequest?.methods ??
+			normalizedGlobal?.methods ??
+			DEFAULT_RETRY_METHODS,
+	};
+};
+
+const shouldRetry = (
+	response: Response,
 	request: Request,
-	responseInterceptors: Set<ResponseInterceptorFN>,
-	options: KoolFetchOptions,
-	// biome-ignore lint/suspicious/noExplicitAny: we don't care about typing here
-): ProxyHandler<ExtendedResponsePromise<Response, any>> => {
-	return {
-		get(target, prop, receiver) {
-			if (prop === "unwrap") {
-				return async (unwrapTarget: UnwrapTargets) => {
-					const response = await target;
-					const processedResponse = await processResponse(
-						request,
-						response,
-						responseInterceptors,
-						options,
-					);
+	retryConfig: RetryConfig,
+): boolean => {
+	const method = request.method.toUpperCase();
 
-					return processedResponse[unwrapTarget]();
-				};
-			}
+	if (!retryConfig.methods?.includes(method)) {
+		return false;
+	}
 
-			if (prop === "unwrapSafe") {
-				return (unwrapTarget: UnwrapTargets) => {
-					return tryCatch(
-						new Proxy(
-							target,
-							createResponsePromiseProxyHandler(
-								request,
-								responseInterceptors,
-								options,
-							),
-						).unwrap(unwrapTarget),
-					);
-				};
-			}
-
-			if (prop === "then") {
-				return (
-					onFulfilled?: (value: Response) => unknown,
-					onRejected?: (reason: unknown) => unknown,
-				) => {
-					return target
-						.then((value: Response) =>
-							processResponse(request, value, responseInterceptors, options),
-						)
-						.then(onFulfilled, onRejected);
-				};
-			}
-
-			if (prop === "catch" || prop === "finally") {
-				const value = target[prop];
-				return typeof value === "function" ? value.bind(target) : value;
-			}
-			return Reflect.get(target, prop, receiver);
-		},
-	};
+	return retryConfig.statusCodes?.includes(response.status) ?? false;
 };
 
-const createFetchProxyHandler = (
-	options: KoolFetchOptions,
-): ProxyHandler<KoolFetchInstance> => {
-	const requestInterceptors = new Set<RequestInterceptorFN>();
-	const responseInterceptors = new Set<ResponseInterceptorFN>();
-	return {
-		apply: (target, thisArg, argArray) => {
-			const [pathName, init] = argArray;
-			const { baseURL, init: fetchInit } = options;
+class RequestBuilder {
+	private url: string;
+	private init: RequestInit;
+	private requestInterceptors: Set<RequestInterceptorFN> = new Set();
+	private responseInterceptors: Set<ResponseInterceptorFN> = new Set();
+	private globalRequestInterceptors: Set<RequestInterceptorFN>;
+	private globalResponseInterceptors: Set<ResponseInterceptorFN>;
+	private fetchFn: typeof globalThis.fetch;
+	private baseURL: string;
+	private options: KoolFetchOptions;
+	private retryConfig: RetryConfig | undefined;
 
-			const endpointURL = buildRequestURL(baseURL ?? "", pathName);
-			const requestInit = mergeRequestInit(fetchInit ?? {}, init ?? {});
+	constructor(
+		url: string,
+		init: RequestInit,
+		globalRequestInterceptors: Set<RequestInterceptorFN>,
+		globalResponseInterceptors: Set<ResponseInterceptorFN>,
+		fetchFn: typeof globalThis.fetch,
+		baseURL: string,
+		options: KoolFetchOptions,
+		retryConfig: RetryConfig | undefined,
+	) {
+		this.url = url;
+		this.init = init;
+		this.globalRequestInterceptors = globalRequestInterceptors;
+		this.globalResponseInterceptors = globalResponseInterceptors;
+		this.fetchFn = fetchFn;
+		this.baseURL = baseURL;
+		this.options = options;
+		this.retryConfig = retryConfig;
+	}
 
-			const request = new Request(endpointURL.toString(), requestInit);
+	addInterceptor(
+		event: "request",
+		handler: RequestInterceptorFN,
+	): RequestBuilder;
+	addInterceptor(
+		event: "response",
+		handler: ResponseInterceptorFN,
+	): RequestBuilder;
+	addInterceptor(
+		event: "request" | "response",
+		handler: RequestInterceptorFN | ResponseInterceptorFN,
+	): RequestBuilder {
+		if (event === "request") {
+			this.requestInterceptors.add(handler as RequestInterceptorFN);
+		} else {
+			this.responseInterceptors.add(handler as ResponseInterceptorFN);
+		}
+		return this;
+	}
 
-			const responsePromise = (async () => {
-				const interceptedRequest = await applyRequestInterceptors(
-					request,
-					requestInterceptors,
-				);
-				return target.apply(thisArg, [interceptedRequest]);
-			})();
+	removeInterceptor(
+		event: "request",
+		handler: RequestInterceptorFN,
+	): RequestBuilder;
+	removeInterceptor(
+		event: "response",
+		handler: ResponseInterceptorFN,
+	): RequestBuilder;
+	removeInterceptor(
+		event: "request" | "response",
+		handler: RequestInterceptorFN | ResponseInterceptorFN,
+	): RequestBuilder {
+		if (event === "request") {
+			this.requestInterceptors.delete(handler as RequestInterceptorFN);
+		} else {
+			this.responseInterceptors.delete(handler as ResponseInterceptorFN);
+		}
+		return this;
+	}
 
-			return new Proxy(
-				responsePromise,
-				createResponsePromiseProxyHandler(
-					request,
-					responseInterceptors,
-					options,
-				),
-			);
-		},
-		get(target, key) {
-			if (key === "addInterceptor") {
-				const addInterceptorFN: InterceptionOperationFN = (event, handler) => {
-					if (event === "request") {
-						requestInterceptors.add(handler as RequestInterceptorFN);
+	unwrap<T extends UnwrapTargets>(target: T) {
+		return this.then((response) => response[target]());
+	}
+
+	unwrapSafe<T extends UnwrapTargets>(target: T) {
+		return tryCatch(this.unwrap(target));
+	}
+
+	private async execute(): Promise<Response> {
+		const endpointURL = buildRequestURL(this.baseURL, this.url);
+		const requestInit = mergeRequestInit(this.options.init ?? {}, this.init);
+		const request = new Request(endpointURL.toString(), requestInit);
+
+		const allRequestInterceptors = new Set([
+			...this.globalRequestInterceptors,
+			...this.requestInterceptors,
+		]);
+
+		const interceptedRequest = await applyRequestInterceptors(
+			request,
+			allRequestInterceptors,
+		);
+
+		const allResponseInterceptors = new Set([
+			...this.globalResponseInterceptors,
+			...this.responseInterceptors,
+		]);
+
+		let lastError: Error | null = null;
+
+		if (this.retryConfig) {
+			const { retries = DEFAULT_RETRIES, delay } = this.retryConfig;
+			for (let attempt = 0; attempt <= retries; attempt++) {
+				if (attempt > 0) {
+					const lastResponse = lastError ? null : undefined;
+
+					const currentDelay =
+						typeof delay === "function"
+							? delay(attempt, lastResponse as Response | null)
+							: (delay ?? 0);
+
+					if (currentDelay > 0) {
+						await new Promise((resolve) => setTimeout(resolve, currentDelay));
 					}
-					if (event === "response") {
-						responseInterceptors.add(handler as ResponseInterceptorFN);
+				}
+
+				try {
+					const response = await this.fetchFn(interceptedRequest);
+
+					if (!shouldRetry(response, interceptedRequest, this.retryConfig)) {
+						return processResponse(
+							interceptedRequest,
+							response,
+							allResponseInterceptors,
+							this.options,
+						);
 					}
-				};
-				return addInterceptorFN;
+
+					lastError = new Error(`Retry failed with status: ${response.status}`);
+				} catch (error) {
+					lastError = error instanceof Error ? error : new Error(String(error));
+				}
 			}
 
-			if (key === "removeInterceptor") {
-				const removeEventListenerFN: InterceptionOperationFN = (
-					eventName,
-					handler,
-				) => {
-					if (eventName === "request") {
-						requestInterceptors.delete(handler as RequestInterceptorFN);
-					}
-					if (eventName === "response") {
-						responseInterceptors.delete(handler as ResponseInterceptorFN);
-					}
-				};
+			throw lastError;
+		}
 
-				return removeEventListenerFN;
-			}
+		const response = await this.fetchFn(interceptedRequest);
 
-			return Reflect.get(target, key);
-		},
-	};
-};
+		return processResponse(
+			interceptedRequest,
+			response,
+			allResponseInterceptors,
+			this.options,
+		);
+	}
+
+	// biome-ignore lint/suspicious/noThenProperty: thenable class required for API compatibility
+	then<TResult1 = Response, TResult2 = never>(
+		onfulfilled?:
+			| ((value: Response) => TResult1 | PromiseLike<TResult1>)
+			| undefined,
+		onrejected?:
+			| ((reason: unknown) => TResult2 | PromiseLike<TResult2>)
+			| undefined,
+	): Promise<TResult1 | TResult2> {
+		return this.execute().then(onfulfilled, onrejected);
+	}
+
+	catch<TResult = never>(
+		onrejected?:
+			| ((reason: unknown) => TResult | PromiseLike<TResult>)
+			| undefined,
+	): Promise<Response | TResult> {
+		return this.execute().catch(onrejected);
+	}
+
+	finally(onfinally?: (() => void) | undefined): Promise<Response> {
+		return this.execute().finally(onfinally);
+	}
+}
 
 export const createKoolFetch = (
 	options?: KoolFetchOptions,
@@ -198,10 +315,78 @@ export const createKoolFetch = (
 		...options,
 	};
 
-	return new Proxy(
-		optionsWithDefaults.fetch as unknown as ExtendedFetch,
-		createFetchProxyHandler(optionsWithDefaults),
-	) as KoolFetchInstance;
+	const requestInterceptors = new Set<RequestInterceptorFN>();
+	const responseInterceptors = new Set<ResponseInterceptorFN>();
+
+	const fetchFn = (
+		...args: Parameters<typeof fetch>
+	): KoolFetchRequestBuilder => {
+		const [pathName, init] = args;
+		const {
+			baseURL,
+			fetch: fetchImpl,
+			init: fetchInit,
+			retry: globalRetry,
+		} = optionsWithDefaults;
+
+		const perRequestInit = init as KoolFetchRequestInit;
+		const perRequestRetry = perRequestInit?.retry;
+		const retryConfig = mergeRetryConfig(globalRetry, perRequestRetry);
+
+		const normalizedBaseURL = baseURL ?? "";
+		const requestUrl =
+			typeof pathName === "string"
+				? pathName
+				: pathName instanceof URL
+					? pathName.toString()
+					: pathName.url;
+
+		const url = buildRequestURL(
+			normalizedBaseURL instanceof URL
+				? normalizedBaseURL.toString()
+				: normalizedBaseURL,
+			requestUrl,
+		);
+		const requestInit = mergeRequestInit(fetchInit ?? {}, init ?? {});
+
+		const builder = new RequestBuilder(
+			url.toString(),
+			requestInit,
+			requestInterceptors,
+			responseInterceptors,
+			fetchImpl ?? globalThis.fetch,
+			normalizedBaseURL instanceof URL
+				? normalizedBaseURL.toString()
+				: normalizedBaseURL,
+			optionsWithDefaults,
+			retryConfig,
+		);
+
+		return builder as unknown as KoolFetchRequestBuilder;
+	};
+
+	const addInterceptor: InterceptionOperationFN = (event, handler) => {
+		if (event === "request") {
+			requestInterceptors.add(handler as RequestInterceptorFN);
+		} else {
+			responseInterceptors.add(handler as ResponseInterceptorFN);
+		}
+	};
+
+	const removeInterceptor: InterceptionOperationFN = (event, handler) => {
+		if (event === "request") {
+			requestInterceptors.delete(handler as RequestInterceptorFN);
+		} else {
+			responseInterceptors.delete(handler as ResponseInterceptorFN);
+		}
+	};
+
+	const koolFetchInstance: KoolFetchInstance = Object.assign(fetchFn, {
+		addInterceptor,
+		removeInterceptor,
+	});
+
+	return koolFetchInstance;
 };
 
 export type * from "./types";
