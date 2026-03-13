@@ -8,6 +8,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  id-token: write 
+  contents: read
+
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -34,5 +38,3 @@ jobs:
 
         - name: "Publish"
           run: bun publish --access public
-          env:
-            NPM_CONFIG_TOKEN: ${{secrets.NPM_CONFIG_TOKEN}}
