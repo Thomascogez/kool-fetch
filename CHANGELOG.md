@@ -1,5 +1,11 @@
 # kool-fetch
 
+## 0.3.1
+
+### Patch Changes
+
+- e7ad7af: Update release workflow with trusted publishing
+
 ## 0.3.0
 
 ### Minor Changes
