@@ -142,6 +142,9 @@ class RequestBuilder {
 	private baseURL: string;
 	private options: KoolFetchOptions;
 	private retryConfig: RetryConfig | undefined;
+	// Lazily initialized shared promise — prevents multiple fetches if
+	// .then(), .catch(), and .finally() are all called on the same builder.
+	private _promise: Promise<Response> | null = null;
 
 	constructor(
 		url: string,
@@ -211,7 +214,9 @@ class RequestBuilder {
 		return tryCatch(this.unwrap(target));
 	}
 
-	private async execute(): Promise<Response> {
+	// Arrow function ensures `this` is always bound correctly when the runtime
+	// invokes execute() through the thenable protocol (e.g. in CF Workers).
+	private execute = async (): Promise<Response> => {
 		const endpointURL = buildRequestURL(this.baseURL, this.url);
 		const requestInit = mergeRequestInit(this.options.init ?? {}, this.init);
 		const request = new Request(endpointURL.toString(), requestInit);
@@ -278,6 +283,15 @@ class RequestBuilder {
 			allResponseInterceptors,
 			this.options,
 		);
+	};
+
+	// Returns a single shared promise so that chaining .then()/.catch()/.finally()
+	// on the same builder instance does not trigger multiple fetches.
+	private getPromise(): Promise<Response> {
+		if (!this._promise) {
+			this._promise = this.execute();
+		}
+		return this._promise;
 	}
 
 	// biome-ignore lint/suspicious/noThenProperty: thenable class required for API compatibility
@@ -289,7 +303,7 @@ class RequestBuilder {
 			| ((reason: unknown) => TResult2 | PromiseLike<TResult2>)
 			| undefined,
 	): Promise<TResult1 | TResult2> {
-		return this.execute().then(onfulfilled, onrejected);
+		return this.getPromise().then(onfulfilled, onrejected);
 	}
 
 	catch<TResult = never>(
@@ -297,11 +311,11 @@ class RequestBuilder {
 			| ((reason: unknown) => TResult | PromiseLike<TResult>)
 			| undefined,
 	): Promise<Response | TResult> {
-		return this.execute().catch(onrejected);
+		return this.getPromise().catch(onrejected);
 	}
 
 	finally(onfinally?: (() => void) | undefined): Promise<Response> {
-		return this.execute().finally(onfinally);
+		return this.getPromise().finally(onfinally);
 	}
 }
 
