@@ -1,5 +1,11 @@
 # kool-fetch
 
+## 0.3.4
+
+### Patch Changes
+
+- 11a6e8e: fix unbound this context on strict v8 environment
+
 ## 0.3.3
 
 ### Patch Changes
