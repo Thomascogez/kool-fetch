@@ -323,7 +323,7 @@ export const createKoolFetch = (
 	options?: KoolFetchOptions,
 ): KoolFetchInstance => {
 	const optionsWithDefaults = {
-		fetch: globalThis.fetch,
+		fetch: globalThis.fetch.bind(globalThis),
 		throwOnHttpError: true,
 		httpErrorFactory: (response: Response) => new Error(response.statusText),
 		...options,
