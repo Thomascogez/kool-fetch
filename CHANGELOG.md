@@ -1,5 +1,11 @@
 # kool-fetch
 
+## 0.3.5
+
+### Patch Changes
+
+- 27f05bc: Fix unbound this on fetch
+
 ## 0.3.4
 
 ### Patch Changes

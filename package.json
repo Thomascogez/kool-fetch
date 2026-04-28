@@ -1,6 +1,6 @@
 {
   "name": "kool-fetch",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "type": "module",
   "author": {
     "email": "thomas.cogez@gmail.com",
