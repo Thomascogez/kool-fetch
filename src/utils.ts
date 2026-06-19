@@ -49,19 +49,59 @@ export const buildRequestURL = (
 	return endpointURL;
 };
 
+// Normalizes any HeadersInit (Record, string[][], Headers) into a flat
+// Record<string, string>, preserving the original key casing for Record and
+// array-of-tuples formats. Headers instances lowercase keys inherently per
+// platform spec; that normalization is preserved here.
+const normalizeHeaders = (input: unknown): Record<string, string> => {
+	if (input == null) {
+		return {};
+	}
+
+	if (typeof Headers !== "undefined" && input instanceof Headers) {
+		const out: Record<string, string> = {};
+		input.forEach((value, key) => {
+			out[key] = value;
+		});
+		return out;
+	}
+
+	if (Array.isArray(input)) {
+		const out: Record<string, string> = {};
+		for (const entry of input) {
+			if (Array.isArray(entry) && entry.length >= 2) {
+				out[String(entry[0])] = String(entry[1]);
+			}
+		}
+		return out;
+	}
+
+	if (typeof input === "object") {
+		return { ...(input as Record<string, string>) };
+	}
+
+	return {};
+};
+
 export const mergeRequestInit = (...inits: RequestInit[]): RequestInit => {
 	const mergedInit: RequestInit = {};
+	let mergedHeaders: Record<string, string> = {};
 
 	for (const init of inits) {
 		for (const [key, value] of Object.entries(init)) {
-			const existingValue = mergedInit[key as keyof RequestInit];
-
-			if (Array.isArray(existingValue)) {
-				Object.assign(mergedInit, { [key]: [...existingValue, value] });
+			if (key === "headers") {
+				// Deep-merge headers so non-conflicting global headers are preserved
+				// while conflicting keys are overridden by the later (request-level) init.
+				mergedHeaders = { ...mergedHeaders, ...normalizeHeaders(value) };
 			} else {
-				Object.assign(mergedInit, { [key]: value });
+				// All other RequestInit fields are single-valued; latest wins.
+				(mergedInit as Record<string, unknown>)[key] = value;
 			}
 		}
+	}
+
+	if (Object.keys(mergedHeaders).length > 0) {
+		mergedInit.headers = mergedHeaders;
 	}
 
 	return mergedInit;

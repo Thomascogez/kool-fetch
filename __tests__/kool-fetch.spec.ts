@@ -36,6 +36,21 @@ const restHandlers = [
 		}
 		return HttpResponse.json({ message: "ok" }, { status: 200 });
 	}),
+	http.get("https://example.com/merged-headers", ({ request }) => {
+		if (request.headers.get("Authorization") !== "authorized") {
+			return HttpResponse.json(
+				{ message: "unauthorized" },
+				{ status: 401, statusText: "Unauthorized" },
+			);
+		}
+		if (request.headers.get("X-Global") !== "1") {
+			return HttpResponse.json(
+				{ message: "missing global header" },
+				{ status: 400, statusText: "Bad Request" },
+			);
+		}
+		return HttpResponse.json({ message: "ok" }, { status: 200 });
+	}),
 ];
 
 const server = setupServer(...restHandlers);
@@ -172,17 +187,18 @@ describe("kool-fetch", () => {
 			expect(response.status).toBe(200);
 		});
 
-		it("should erase the default init when providing a request init when making a request", async () => {
+		it("should merge request init with default init, request-level headers overriding global ones", async () => {
 			const koolFetch = createKoolFetch({
 				baseURL: "https://example.com",
 				init: {
 					headers: {
 						Authorization: "Bearer 1234567890",
+						"X-Global": "1",
 					},
 				},
 			});
 
-			const response = await koolFetch("/authed", {
+			const response = await koolFetch("/merged-headers", {
 				method: "GET",
 				headers: {
 					Authorization: "authorized",
