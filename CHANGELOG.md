@@ -1,5 +1,17 @@
 # kool-fetch
 
+## 0.4.0
+
+### Minor Changes
+
+- df5b43c: ### Fixed: Request init headers are now merged instead of replaced
+
+  Global `init.headers` are now deep-merged with per-request `headers`. When a
+  header key exists in both, the per-request value wins. Previously, providing
+  any `headers` at the request level would erase all global headers, even
+  non-conflicting ones. All `HeadersInit` formats (object, array of tuples,
+  `Headers` instance, string) are now supported and normalized.
+
 ## 0.3.5
 
 ### Patch Changes
