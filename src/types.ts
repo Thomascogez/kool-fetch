@@ -1,21 +1,41 @@
-import type { tryCatch } from "./utils";
-
 export type UnwrapTargets = "json" | "arrayBuffer" | "blob" | "text";
+
+// Maps each unwrap target to its resolved (awaited) return type.
+// Uses non-distributive conditional ([T] extends [...]) so that a specific
+// target like "arrayBuffer" resolves to ArrayBuffer, while the full union
+// falls back to unknown (the safe default).
+type ResolvedUnwrap<R extends Response, T extends UnwrapTargets> = [T] extends [
+	"json",
+]
+	? Awaited<ReturnType<R["json"]>>
+	: [T] extends ["arrayBuffer"]
+		? Awaited<ReturnType<R["arrayBuffer"]>>
+		: [T] extends ["text"]
+			? Awaited<ReturnType<R["text"]>>
+			: [T] extends ["blob"]
+				? Awaited<ReturnType<R["blob"]>>
+				: unknown;
 
 export type ExtendedResponsePromise<
 	R extends Response,
 	U extends UnwrapTargets,
 > = Promise<R> & {
-	unwrap: <Unwrapped = ReturnType<R[U]>>(
-		to: U,
-	) => Unwrapped extends Promise<Unwrapped> ? Unwrapped : Promise<Unwrapped>;
-	unwrapSafe: <Unwrapped = ReturnType<R[U]>, Error = unknown>(
-		to: U,
-	) => ReturnType<
-		typeof tryCatch<
-			Unwrapped extends Promise<Unwrapped> ? Unwrapped : Promise<Unwrapped>,
-			Error
-		>
+	// Unwrapped is first so users can write unwrap<{id: number}>("json").
+	// T is inferred from the `to` argument, narrowing the return type.
+	// undefined sentinel detects whether the user supplied Unwrapped.
+	unwrap: <Unwrapped = undefined, T extends U = U>(
+		to: T,
+	) => Promise<
+		[Unwrapped] extends [undefined] ? ResolvedUnwrap<R, T> : Unwrapped
+	>;
+	unwrapSafe: <Unwrapped = undefined, Error = unknown, T extends U = U>(
+		to: T,
+	) => Promise<
+		| [
+				[Unwrapped] extends [undefined] ? ResolvedUnwrap<R, T> : Unwrapped,
+				undefined,
+		  ]
+		| [undefined, Error]
 	>;
 };
 

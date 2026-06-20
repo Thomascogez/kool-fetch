@@ -24,6 +24,7 @@
     "generate-types": "tsc --emitDeclarationOnly src/index.ts --outDir ./dist",
     "test:watch": "vitest",
     "test:single": "vitest run",
+    "test:types": "vitest run --typecheck",
     "checks": "npm-run-all --parallel checks:*",
     "checks:types": "tsc --noEmit",
     "checks:biome": "biome check",

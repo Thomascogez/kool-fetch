@@ -34,3 +34,6 @@ jobs:
 
         - name: Test
           run: bun run test:single
+
+        - name: Type tests
+          run: bun run test:types
