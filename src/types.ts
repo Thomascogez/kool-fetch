@@ -28,14 +28,14 @@ export type ExtendedResponsePromise<
 	) => Promise<
 		[Unwrapped] extends [undefined] ? ResolvedUnwrap<R, T> : Unwrapped
 	>;
-	unwrapSafe: <Unwrapped = undefined, Error = unknown, T extends U = U>(
+	unwrapSafe: <Unwrapped = undefined, Err = Error, T extends U = U>(
 		to: T,
 	) => Promise<
 		| [
 				[Unwrapped] extends [undefined] ? ResolvedUnwrap<R, T> : Unwrapped,
 				undefined,
 		  ]
-		| [undefined, Error]
+		| [undefined, Err]
 	>;
 };
 

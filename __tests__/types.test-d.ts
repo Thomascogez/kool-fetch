@@ -20,9 +20,15 @@ describe("tryCatch", () => {
 	});
 
 	test("destructuring gives resolved value | undefined and error | undefined", async () => {
-		const [data, err] = await tryCatch(Promise.resolve("hello"));
+		const [data, error] = await tryCatch(Promise.resolve("hello"));
 		expectTypeOf(data).toEqualTypeOf<string | undefined>();
-		expectTypeOf(err).toEqualTypeOf<Error | undefined>();
+		expectTypeOf(error).toEqualTypeOf<Error | undefined>();
+	});
+
+	test("checking error narrows data", async () => {
+		const [data, error] = await tryCatch(Promise.resolve("hello"));
+		if (error) throw error;
+		expectTypeOf(data).toEqualTypeOf<string>();
 	});
 });
 
@@ -138,10 +144,10 @@ describe("unwrap return types", () => {
 });
 
 describe("unwrapSafe tuple types", () => {
-	test("unwrapSafe('arrayBuffer') left element is ArrayBuffer | undefined, not Promise", async () => {
-		const [data, err] = await kf("/x").unwrapSafe("arrayBuffer");
+	test("unwrapSafe('arrayBuffer') left element is ArrayBuffer, not Promise", async () => {
+		const [data, error] = await kf("/x").unwrapSafe("arrayBuffer");
 		expectTypeOf(data).toEqualTypeOf<ArrayBuffer | undefined>();
-		expectTypeOf(err).toEqualTypeOf<unknown>();
+		expectTypeOf(error).toEqualTypeOf<Error | undefined>();
 	});
 
 	test("unwrapSafe('text') left element is string | undefined", async () => {
@@ -167,8 +173,20 @@ describe("unwrapSafe tuple types", () => {
 	});
 
 	test("custom error type via second generic", async () => {
-		const [data, err] = await kf("/x").unwrapSafe<unknown, TypeError>("json");
+		const [data, error] = await kf("/x").unwrapSafe<unknown, TypeError>("json");
 		expectTypeOf(data).toEqualTypeOf<unknown>();
-		expectTypeOf(err).toEqualTypeOf<TypeError | undefined>();
+		expectTypeOf(error).toEqualTypeOf<TypeError | undefined>();
+	});
+
+	test("checking error narrows left element to string", async () => {
+		const [data, error] = await kf("/x").unwrapSafe("text");
+		if (error) return;
+		expectTypeOf(data).toEqualTypeOf<string>();
+	});
+
+	test("checking error narrows left element to explicit generic", async () => {
+		const [data, error] = await kf("/x").unwrapSafe<{ id: number }>("json");
+		if (error) return;
+		expectTypeOf(data).toEqualTypeOf<{ id: number }>();
 	});
 });
