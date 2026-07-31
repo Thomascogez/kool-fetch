@@ -1,5 +1,11 @@
 # kool-fetch
 
+## 0.5.1
+
+### Patch Changes
+
+- a4cc267: Fix type narrowing for `unwrapSafe`: the default `Error` generic is now `Error` instead of `unknown`, so `const [data, error] = await ...; if (error) return;` narrows `data` from `T | undefined` to `T`.
+
 ## 0.5.0
 
 ### Minor Changes
