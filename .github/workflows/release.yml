@@ -19,25 +19,27 @@ jobs:
     steps:
         - uses: actions/checkout@v4
 
-        - name: "Install bun"
-          uses: oven-sh/setup-bun@v2
-          with:
-            bun-version: latest
+        - name: "Install pnpm"
+          uses: pnpm/action-setup@v4
 
-        - name: "Install dependencies"
-          run: bun install --frozen-lockfile
-
-        - name: Checks
-          run: bun run checks
-        
-        - name: Test
-          run: bun run test:single
-
-        - name: Build
-          run: bun run build
-
-        - uses: actions/setup-node@v4
+        - name: "Install Node.js"
+          uses: actions/setup-node@v4
           with:
             node-version: '24'
+            cache: 'pnpm'
             registry-url: 'https://registry.npmjs.org'
-        - run: npm publish # Currently use npm publish since bun does not support oidc publish for now
+
+        - name: "Install dependencies"
+          run: pnpm install --frozen-lockfile
+
+        - name: Checks
+          run: pnpm run checks
+
+        - name: Test
+          run: pnpm run test:single
+
+        - name: Build
+          run: pnpm run build
+
+        # npm publish (rather than pnpm publish) for npm's OIDC trusted publishing support.
+        - run: npm publish

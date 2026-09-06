@@ -152,13 +152,13 @@ describe("utils", () => {
 		});
 
 		it("should merge headers given as arrays of tuples without nesting", () => {
-			const global = {
+			const global: RequestInit = {
 				headers: [
 					["X-Global", "1"],
 					["X-Other", "2"],
 				],
 			};
-			const request = {
+			const request: RequestInit = {
 				headers: [["X-Request", "3"]],
 			};
 
