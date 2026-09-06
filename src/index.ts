@@ -1,9 +1,11 @@
+import { resolveProxyDispatch } from "./proxy.js";
 import type {
 	InterceptionOperationFN,
 	KoolFetchInstance,
 	KoolFetchOptions,
 	KoolFetchRequestBuilder,
 	KoolFetchRequestInit,
+	ProxyOption,
 	RequestInterceptorFN,
 	ResponseInterceptorFN,
 	RetryConfig,
@@ -117,6 +119,17 @@ const mergeRetryConfig = (
 	};
 };
 
+const mergeProxyOption = (
+	globalProxy: ProxyOption | undefined,
+	perRequestProxy: ProxyOption | false | undefined,
+): ProxyOption | undefined => {
+	if (perRequestProxy === false) {
+		return undefined;
+	}
+
+	return perRequestProxy ?? globalProxy;
+};
+
 const shouldRetry = (
 	response: Response,
 	request: Request,
@@ -142,6 +155,7 @@ class RequestBuilder {
 	private baseURL: string;
 	private options: KoolFetchOptions;
 	private retryConfig: RetryConfig | undefined;
+	private proxyOption: ProxyOption | undefined;
 	// Lazily initialized shared promise — prevents multiple fetches if
 	// .then(), .catch(), and .finally() are all called on the same builder.
 	private _promise: Promise<Response> | null = null;
@@ -155,6 +169,7 @@ class RequestBuilder {
 		baseURL: string,
 		options: KoolFetchOptions,
 		retryConfig: RetryConfig | undefined,
+		proxyOption: ProxyOption | undefined,
 	) {
 		this.url = url;
 		this.init = init;
@@ -164,6 +179,7 @@ class RequestBuilder {
 		this.baseURL = baseURL;
 		this.options = options;
 		this.retryConfig = retryConfig;
+		this.proxyOption = proxyOption;
 	}
 
 	addInterceptor(
@@ -236,6 +252,19 @@ class RequestBuilder {
 			...this.responseInterceptors,
 		]);
 
+		// Proxying needs a runtime-appropriate transport (Bun/Deno's native
+		// fetch extensions, or undici's own fetch elsewhere), so it is resolved
+		// once up front and takes over from the configured `fetchFn` for this
+		// request rather than being layered on top of it.
+		const proxyDispatch = this.proxyOption
+			? await resolveProxyDispatch(this.proxyOption)
+			: undefined;
+
+		const performFetch = (): Promise<Response> =>
+			proxyDispatch
+				? proxyDispatch.execute(interceptedRequest)
+				: this.fetchFn(interceptedRequest);
+
 		if (this.retryConfig) {
 			const retryConfig = this.retryConfig;
 
@@ -254,7 +283,7 @@ class RequestBuilder {
 					}
 				}
 
-				const response = await this.fetchFn(interceptedRequest);
+				const response = await performFetch();
 
 				if (!shouldRetry(response, interceptedRequest, retryConfig)) {
 					return processResponse(
@@ -275,7 +304,7 @@ class RequestBuilder {
 			return executeWithRetry(0, null);
 		}
 
-		const response = await this.fetchFn(interceptedRequest);
+		const response = await performFetch();
 
 		return processResponse(
 			interceptedRequest,
@@ -341,11 +370,14 @@ export const createKoolFetch = (
 			fetch: fetchImpl,
 			init: fetchInit,
 			retry: globalRetry,
+			proxy: globalProxy,
 		} = optionsWithDefaults;
 
 		const perRequestInit = init as KoolFetchRequestInit;
 		const perRequestRetry = perRequestInit?.retry;
 		const retryConfig = mergeRetryConfig(globalRetry, perRequestRetry);
+		const perRequestProxy = perRequestInit?.proxy;
+		const proxyOption = mergeProxyOption(globalProxy, perRequestProxy);
 
 		const normalizedBaseURL = baseURL ?? "";
 		const requestUrl =
@@ -374,6 +406,7 @@ export const createKoolFetch = (
 				: normalizedBaseURL,
 			optionsWithDefaults,
 			retryConfig,
+			proxyOption,
 		);
 
 		return builder as unknown as KoolFetchRequestBuilder;

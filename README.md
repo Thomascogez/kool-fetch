@@ -88,6 +88,7 @@ When you are initializing your kool-fetch instance you have multiple usefull opt
 | `throwOnHttpError` | Throw an error when the response is not ok | true | false |
 | `httpErrorFactory` | Factory function to create an error when the response is not ok | (response) => Error(response.statusText) | (response) => { return new Error(response.statusText) } |
 | `retry` | Retry configuration (boolean or object) | undefined | true / { retries: 3 } |
+| `proxy` | HTTP/SOCKS forward proxy URL to route requests through | undefined | "http://user:pass@proxy.example.com:8080" |
 
 ## Features
 
@@ -252,6 +253,30 @@ retry: {
   }
 }
 ```
+
+### Proxy
+
+kool-fetch supports routing requests through an HTTP/SOCKS forward proxy (e.g. Fixie), similar to axios' `proxy` option.
+
+```ts
+const koolFetch = createKoolFetch({
+  baseURL: "https://api.example.com",
+  proxy: "http://user:pass@proxy.example.com:8080",
+});
+
+// Disable the proxy for a single request
+await koolFetch("/no-proxy", { proxy: false });
+
+// Use a different proxy for a single request
+await koolFetch("/via-other-proxy", { proxy: "http://other-proxy.example.com:8080" });
+```
+
+Under the hood, kool-fetch picks the right transport for the current runtime:
+
+- **Bun** and **Deno** — uses their native, built-in proxy support, no extra dependency needed.
+- **Node.js** (including Vercel Functions/Fluid Compute, and Cloudflare Workers with the `nodejs_compat` compatibility flag) — uses [`undici`](https://www.npmjs.com/package/undici)'s `ProxyAgent`. `undici` is an **optional peer dependency**: install it yourself (`npm install undici`) only if you use `proxy` in one of these environments. If it isn't installed, `proxy` throws a clear error instead of silently sending your request unproxied.
+
+Real browsers, and any other environment with no way to hook into how `fetch` opens its network connection, have no equivalent — this is a platform limitation, not something kool-fetch (or axios) can work around. If you need proxying from such an environment, route the request through a server you control instead, and point `baseURL` at that server.
 
 ## Usage with third party libraries
 

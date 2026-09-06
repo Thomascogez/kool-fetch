@@ -1,3 +1,7 @@
+import type { ProxyOption } from "./proxy.js";
+
+export type { ProxyOption } from "./proxy.js";
+
 export type UnwrapTargets = "json" | "arrayBuffer" | "blob" | "text";
 
 // Maps each unwrap target to its resolved (awaited) return type.
@@ -49,6 +53,7 @@ export type KoolFetchOptions = {
 		request: Request,
 	) => Error | Promise<Error>;
 	retry?: RetryOption;
+	proxy?: ProxyOption;
 };
 
 export type RequestInterceptorFN = (
@@ -85,6 +90,8 @@ export type RetryOption = boolean | RetryConfig;
 
 export type KoolFetchRequestInit = RequestInit & {
 	retry?: RetryOption;
+	// `false` explicitly disables a global proxy for this one request.
+	proxy?: ProxyOption | false;
 };
 
 export type KoolFetchRequestBuilder = Promise<Response> & {
