@@ -1,4 +1,4 @@
-import type * as undici from "undici";
+import type { ProxyAgent } from "undici";
 
 export type ProxyOption = string | URL;
 
@@ -10,7 +10,9 @@ const getGlobal = (name: string): unknown =>
 	(globalThis as Record<string, unknown>)[name];
 
 const denoHttpClients = new Map<string, unknown>();
-let undiciModulePromise: Promise<typeof undici> | null = null;
+const undiciProxyAgents = new Map<string, InstanceType<typeof ProxyAgent>>();
+// biome-ignore lint/suspicious/noExplicitAny: runtime-specific types
+let undiciModulePromise: Promise<any> | null = null;
 
 const normalizeProxyURL = (proxy: ProxyOption): string =>
 	proxy instanceof URL ? proxy.toString() : proxy;
@@ -32,6 +34,15 @@ const toFetchArgs = async (
 			headers: Array.from(request.headers.entries()),
 			body,
 			redirect: request.redirect,
+			signal: request.signal,
+			credentials: request.credentials,
+			cache: request.cache,
+			integrity: request.integrity,
+			keepalive: request.keepalive,
+			referrer: request.referrer,
+			referrerPolicy: request.referrerPolicy,
+			mode: request.mode,
+			duplex: request.duplex,
 		},
 	];
 };
@@ -90,15 +101,29 @@ const resolveUndiciProxyDispatch = async (
 	return {
 		execute: async (request) => {
 			const [url, init] = await toFetchArgs(request);
-			const dispatcher = new undici.ProxyAgent(proxyURL);
+
+			// Cached per proxy URL and reused across requests (mirrors the Deno
+			// client cache above) so a proxied request only pays for a new
+			// DNS lookup + TCP/TLS handshake to the proxy when it actually needs
+			// one, instead of on every single call.
+			const dispatcher: InstanceType<typeof ProxyAgent> =
+				undiciProxyAgents.get(proxyURL) ?? new undici.ProxyAgent(proxyURL);
+
+			undiciProxyAgents.set(proxyURL, dispatcher);
 
 			try {
 				return await undici.fetch(url, { ...init, dispatcher });
-			} finally {
-				// close() waits for the in-flight request (including a still-
-				// streaming response body) to finish before tearing the socket
-				// down, so this is safe to fire without awaiting it here.
+			} catch (cause) {
+				// The cached tunnel may be the thing that's actually broken (a
+				// stalled or silently dropped connection, surfaced here as a
+				// connection error or undici's own header/body timeout) — drop
+				// it so the next request builds a fresh one instead of
+				// repeatedly retrying the same dead tunnel.
+				if (undiciProxyAgents.get(proxyURL) === dispatcher) {
+					undiciProxyAgents.delete(proxyURL);
+				}
 				dispatcher.close().catch(() => {});
+				throw cause;
 			}
 		},
 	};

@@ -260,10 +260,20 @@ class RequestBuilder {
 			? await resolveProxyDispatch(this.proxyOption)
 			: undefined;
 
-		const performFetch = (): Promise<Response> =>
-			proxyDispatch
-				? proxyDispatch.execute(interceptedRequest)
-				: this.fetchFn(interceptedRequest);
+		// A request with a body can only be read once. Without retries,
+		// interceptedRequest is dispatched exactly once, so it's used directly.
+		// With retries, the same request may be dispatched multiple times, so
+		// each attempt gets its own clone — interceptedRequest itself is never
+		// read, so it stays valid to clone again for every subsequent attempt.
+		const performFetch = (): Promise<Response> => {
+			const attemptRequest = this.retryConfig
+				? interceptedRequest.clone()
+				: interceptedRequest;
+
+			return proxyDispatch
+				? proxyDispatch.execute(attemptRequest)
+				: this.fetchFn(attemptRequest);
+		};
 
 		if (this.retryConfig) {
 			const retryConfig = this.retryConfig;
