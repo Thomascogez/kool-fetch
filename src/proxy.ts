@@ -1,3 +1,5 @@
+import type * as undici from "undici";
+
 export type ProxyOption = string | URL;
 
 type ProxyDispatch = {
@@ -8,9 +10,7 @@ const getGlobal = (name: string): unknown =>
 	(globalThis as Record<string, unknown>)[name];
 
 const denoHttpClients = new Map<string, unknown>();
-const undiciProxyAgents = new Map<string, unknown>();
-// biome-ignore lint/suspicious/noExplicitAny: dynamically imported, shape is only known at runtime
-let undiciModulePromise: Promise<any> | null = null;
+let undiciModulePromise: Promise<typeof undici> | null = null;
 
 const normalizeProxyURL = (proxy: ProxyOption): string =>
 	proxy instanceof URL ? proxy.toString() : proxy;
@@ -72,13 +72,6 @@ const loadUndici = () => {
 	return undiciModulePromise;
 };
 
-// Fallback for every other environment (Node, Vercel Functions, Cloudflare
-// Workers with nodejs_compat, ...). Uses undici's own fetch + ProxyAgent
-// directly instead of the platform's fetch, since undici implements the HTTP
-// protocol itself over node:net/node:tls rather than depending on a
-// platform-level dispatcher hook. It also has its own Request/Response
-// classes, so a Request built by a different runtime's global fetch isn't
-// recognized — another reason toFetchArgs() unpacks to plain arguments first.
 const resolveUndiciProxyDispatch = async (
 	proxyURL: string,
 ): Promise<ProxyDispatch> => {
@@ -94,17 +87,19 @@ const resolveUndiciProxyDispatch = async (
 		);
 	}
 
-	let dispatcher = undiciProxyAgents.get(proxyURL);
-
-	if (!dispatcher) {
-		dispatcher = new undici.ProxyAgent(proxyURL);
-		undiciProxyAgents.set(proxyURL, dispatcher);
-	}
-
 	return {
 		execute: async (request) => {
 			const [url, init] = await toFetchArgs(request);
-			return undici.fetch(url, { ...init, dispatcher });
+			const dispatcher = new undici.ProxyAgent(proxyURL);
+
+			try {
+				return await undici.fetch(url, { ...init, dispatcher });
+			} finally {
+				// close() waits for the in-flight request (including a still-
+				// streaming response body) to finish before tearing the socket
+				// down, so this is safe to fire without awaiting it here.
+				dispatcher.close().catch(() => {});
+			}
 		},
 	};
 };

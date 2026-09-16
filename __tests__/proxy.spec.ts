@@ -15,18 +15,27 @@ import { createKoolFetch } from "../src";
 // A minimal forward proxy: it never needs to actually reach "example.com"
 // because a real forward proxy receives the absolute-form request itself and
 // answers it directly, so this is enough to prove requests were routed
-// through the proxy rather than sent directly.
+// through the proxy rather than sent directly. Also counts raw TCP
+// connections (rather than requests) so tests can tell whether a proxy
+// dispatcher reused one connection across requests or opened a fresh one
+// per request.
 const startProxyServer = () => {
 	const requests: string[] = [];
+	let connectionCount = 0;
 	const server = http.createServer((req, res) => {
 		requests.push(req.url ?? "");
 		res.writeHead(200, { "content-type": "application/json" });
 		res.end(JSON.stringify({ viaProxy: true }));
 	});
 
+	server.on("connection", () => {
+		connectionCount += 1;
+	});
+
 	return new Promise<{
 		url: string;
 		requests: string[];
+		connectionCount: () => number;
 		close: () => Promise<void>;
 	}>((resolve) => {
 		server.listen(0, "127.0.0.1", () => {
@@ -34,6 +43,7 @@ const startProxyServer = () => {
 			resolve({
 				url: `http://127.0.0.1:${port}`,
 				requests,
+				connectionCount: () => connectionCount,
 				close: () => new Promise((res) => server.close(() => res())),
 			});
 		});
@@ -191,6 +201,20 @@ describe("Proxy", () => {
 
 			expect(body).toEqual({ viaProxy: true });
 			expect(proxy.requests).toEqual(["http://example.com/some/path"]);
+		});
+
+		it("opens a fresh proxy connection per request instead of reusing one", async () => {
+			const koolFetch = createKoolFetch({
+				baseURL: "http://example.com",
+				proxy: proxy.url,
+			});
+
+			const before = proxy.connectionCount();
+
+			await koolFetch("/one");
+			await koolFetch("/two");
+
+			expect(proxy.connectionCount() - before).toBe(2);
 		});
 
 		it("throws a clear error when undici cannot be loaded", async () => {
